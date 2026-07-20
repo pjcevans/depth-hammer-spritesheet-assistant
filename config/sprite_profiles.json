@@ -1,0 +1,217 @@
+{
+  "version": 1,
+  "direction_order": ["north", "east", "west", "south"],
+  "profiles": {
+    "mob": {
+      "label": "Monster",
+      "plural_label": "Monsters",
+      "folder": "monsters",
+      "subject": "creature",
+      "notes": "A complete monster export contains 11 animation strips plus its 32x32 base sprite and large examine image.",
+      "groups": [
+        {
+          "id": "base",
+          "label": "Base sprite",
+          "prompt_key": "base",
+          "mode": "normalize",
+          "source_frames": 1,
+          "outputs": [
+            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500}
+          ]
+        },
+        {
+          "id": "large",
+          "label": "Large examine image",
+          "prompt_key": "large",
+          "mode": "passthrough",
+          "source_frames": 1,
+          "minimum_size": [64, 64],
+          "outputs": [
+            {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500}
+          ]
+        },
+        {
+          "id": "walk",
+          "label": "Walking — all directions",
+          "prompt_key": "walk",
+          "mode": "normalize_split",
+          "source_frames": 16,
+          "outputs": [
+            {"suffix": "_walk_up.png", "frames": 4, "start": 0, "frame_ms": 165},
+            {"suffix": "_walk_right.png", "frames": 4, "start": 4, "frame_ms": 165},
+            {"suffix": "_walk_left.png", "frames": 4, "start": 8, "frame_ms": 165},
+            {"suffix": "_walk_down.png", "frames": 4, "start": 12, "frame_ms": 165}
+          ]
+        },
+        {
+          "id": "melee",
+          "label": "Melee attack — all directions",
+          "prompt_key": "melee",
+          "mode": "normalize_split",
+          "source_frames": 16,
+          "outputs": [
+            {"suffix": "_melee_up.png", "frames": 4, "start": 0, "frame_ms": 125},
+            {"suffix": "_melee_right.png", "frames": 4, "start": 4, "frame_ms": 125},
+            {"suffix": "_melee_left.png", "frames": 4, "start": 8, "frame_ms": 125, "reverse": true},
+            {"suffix": "_melee_down.png", "frames": 4, "start": 12, "frame_ms": 125}
+          ]
+        },
+        {
+          "id": "death",
+          "label": "Death animation",
+          "prompt_key": "death",
+          "mode": "normalize",
+          "source_frames": 8,
+          "outputs": [
+            {"suffix": "_death.png", "frames": 8, "start": 0, "frame_ms": 170}
+          ]
+        },
+        {
+          "id": "deathfire",
+          "label": "Death by fire animation",
+          "prompt_key": "deathfire",
+          "mode": "normalize",
+          "source_frames": 8,
+          "outputs": [
+            {"suffix": "_deathfire.png", "frames": 8, "start": 0, "frame_ms": 150}
+          ]
+        },
+        {
+          "id": "wake",
+          "label": "Wake animation",
+          "prompt_key": "wake",
+          "mode": "normalize",
+          "source_frames": 8,
+          "outputs": [
+            {"suffix": "_wake.png", "frames": 8, "start": 0, "frame_ms": 190}
+          ]
+        }
+      ]
+    },
+    "player": {
+      "label": "Player character",
+      "plural_label": "Players",
+      "folder": "player",
+      "subject": "player character",
+      "notes": "A complete player export contains 23 animation strips plus its 32x32 base sprite and large examine image. Godot creates .import files itself.",
+      "groups": [
+        {
+          "id": "base",
+          "label": "Base sprite",
+          "prompt_key": "base",
+          "mode": "normalize",
+          "source_frames": 1,
+          "outputs": [
+            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500}
+          ]
+        },
+        {
+          "id": "large",
+          "label": "Large examine image",
+          "prompt_key": "large",
+          "mode": "passthrough",
+          "source_frames": 1,
+          "minimum_size": [64, 64],
+          "outputs": [
+            {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500}
+          ]
+        },
+        {
+          "id": "walk",
+          "label": "Walking — all directions",
+          "prompt_key": "walk",
+          "mode": "normalize_split",
+          "source_frames": 16,
+          "outputs": [
+            {"suffix": "_walk_up.png", "frames": 4, "start": 0, "frame_ms": 165},
+            {"suffix": "_walk_right.png", "frames": 4, "start": 4, "frame_ms": 165},
+            {"suffix": "_walk_left.png", "frames": 4, "start": 8, "frame_ms": 165},
+            {"suffix": "_walk_down.png", "frames": 4, "start": 12, "frame_ms": 165}
+          ]
+        },
+        {
+          "id": "melee",
+          "label": "Melee attack — all directions",
+          "prompt_key": "melee",
+          "mode": "normalize_split",
+          "source_frames": 16,
+          "outputs": [
+            {"suffix": "_melee_up.png", "frames": 4, "start": 0, "frame_ms": 125},
+            {"suffix": "_melee_right.png", "frames": 4, "start": 4, "frame_ms": 125},
+            {"suffix": "_melee_left.png", "frames": 4, "start": 8, "frame_ms": 125, "reverse": true},
+            {"suffix": "_melee_down.png", "frames": 4, "start": 12, "frame_ms": 125}
+          ]
+        },
+        {
+          "id": "cast",
+          "label": "Spell casting — all directions",
+          "prompt_key": "cast",
+          "mode": "normalize_split",
+          "source_frames": 16,
+          "outputs": [
+            {"suffix": "_cast_up.png", "frames": 4, "start": 0, "frame_ms": 145},
+            {"suffix": "_cast_right.png", "frames": 4, "start": 4, "frame_ms": 145},
+            {"suffix": "_cast_left.png", "frames": 4, "start": 8, "frame_ms": 145},
+            {"suffix": "_cast_down.png", "frames": 4, "start": 12, "frame_ms": 145}
+          ]
+        },
+        {
+          "id": "mine",
+          "label": "Mining — all directions",
+          "prompt_key": "mine",
+          "mode": "normalize_split",
+          "source_frames": 16,
+          "outputs": [
+            {"suffix": "_mine_up.png", "frames": 4, "start": 0, "frame_ms": 135},
+            {"suffix": "_mine_right.png", "frames": 4, "start": 4, "frame_ms": 135},
+            {"suffix": "_mine_left.png", "frames": 4, "start": 8, "frame_ms": 135},
+            {"suffix": "_mine_down.png", "frames": 4, "start": 12, "frame_ms": 135}
+          ]
+        },
+        {
+          "id": "shoot",
+          "label": "Bow or crossbow shooting — all directions",
+          "prompt_key": "shoot",
+          "mode": "normalize_split",
+          "source_frames": 16,
+          "outputs": [
+            {"suffix": "_shoot_up.png", "frames": 4, "start": 0, "frame_ms": 145},
+            {"suffix": "_shoot_right.png", "frames": 4, "start": 4, "frame_ms": 145},
+            {"suffix": "_shoot_left.png", "frames": 4, "start": 8, "frame_ms": 145},
+            {"suffix": "_shoot_down.png", "frames": 4, "start": 12, "frame_ms": 145}
+          ]
+        },
+        {
+          "id": "rest",
+          "label": "Rest animation",
+          "prompt_key": "rest",
+          "mode": "normalize",
+          "source_frames": 8,
+          "outputs": [
+            {"suffix": "_rest.png", "frames": 8, "start": 0, "frame_ms": 230}
+          ]
+        },
+        {
+          "id": "death",
+          "label": "Death animation",
+          "prompt_key": "death",
+          "mode": "normalize",
+          "source_frames": 8,
+          "outputs": [
+            {"suffix": "_death.png", "frames": 8, "start": 0, "frame_ms": 170}
+          ]
+        },
+        {
+          "id": "deathfire",
+          "label": "Death by fire animation",
+          "prompt_key": "deathfire",
+          "mode": "normalize",
+          "source_frames": 8,
+          "outputs": [
+            {"suffix": "_deathfire.png", "frames": 8, "start": 0, "frame_ms": 150}
+          ]
+        }
+      ]
+    }
+  }
+}

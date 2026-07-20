@@ -1,0 +1,7 @@
+{
+  "sprites_root": "",
+  "host": "127.0.0.1",
+  "port": 8765,
+  "open_browser": true,
+  "max_upload_mb": 64
+}

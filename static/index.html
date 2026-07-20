@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Depth Hammer · Spritesheet Assistant</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true">DH</div>
+      <div class="brand-copy">
+        <h1>Spritesheet Assistant</h1>
+        <p>Depth Hammer asset workshop</p>
+      </div>
+      <div class="root-pill" id="root-pill">
+        <span class="status-dot"></span>
+        <span id="root-pill-text">Connecting…</span>
+      </div>
+    </header>
+
+    <nav class="tabbar" aria-label="Main sections">
+      <button class="tab-button active" data-tab="gallery">Sprite Library</button>
+      <button class="tab-button" data-tab="mob">New Monster</button>
+      <button class="tab-button" data-tab="player">New Player</button>
+      <button class="tab-button" data-tab="prompts">Prompt Templates</button>
+      <button class="tab-button" data-tab="settings">Settings</button>
+    </nav>
+
+    <main>
+      <section class="tab-panel active" id="tab-gallery" data-panel="gallery">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Existing artwork</p>
+            <h2>Sprite Library</h2>
+            <p>Browse every player and monster folder. Animation strips play automatically.</p>
+          </div>
+          <button class="button secondary" id="refresh-library">Refresh library</button>
+        </div>
+
+        <div class="notice hidden" id="library-notice"></div>
+        <div class="library-layout">
+          <aside class="entity-browser">
+            <div class="filter-stack">
+              <label>
+                <span>Search</span>
+                <input type="search" id="library-search" placeholder="Bandit, type2…">
+              </label>
+              <label>
+                <span>Show</span>
+                <select id="library-profile-filter">
+                  <option value="all">Players and monsters</option>
+                  <option value="mob">Monsters only</option>
+                  <option value="player">Players only</option>
+                </select>
+              </label>
+            </div>
+            <div class="entity-list" id="entity-list">
+              <div class="empty-state compact">Loading folders…</div>
+            </div>
+          </aside>
+          <div class="library-detail" id="library-detail">
+            <div class="empty-state">Choose a character or monster to inspect its sprites.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-mob" data-panel="mob">
+        <div class="creation-host" data-profile-host="mob"></div>
+      </section>
+
+      <section class="tab-panel" id="tab-player" data-panel="player">
+        <div class="creation-host" data-profile-host="player"></div>
+      </section>
+
+      <section class="tab-panel" id="tab-prompts" data-panel="prompts">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Editable generation language</p>
+            <h2>Prompt Templates</h2>
+            <p>Changes are saved beside the app and used the next time prompts are generated.</p>
+          </div>
+          <div class="button-row">
+            <button class="button secondary" id="reset-templates">Restore defaults</button>
+            <button class="button primary" id="save-templates">Save templates</button>
+          </div>
+        </div>
+        <div class="template-editor">
+          <label class="field-card">
+            <span class="field-title">Generic style ending</span>
+            <span class="field-help">Inserted as <code>{{style}}</code> in every relevant template.</span>
+            <textarea id="template-style" rows="6"></textarea>
+          </label>
+          <label class="field-card">
+            <span class="field-title">Reference-image instruction</span>
+            <span class="field-help">Inserted as <code>{{reference}}</code>.</span>
+            <textarea id="template-reference" rows="3"></textarea>
+          </label>
+          <div id="template-list" class="template-list"></div>
+        </div>
+        <p class="placeholder-help">Available placeholders: <code>{{name}}</code>, <code>{{description}}</code>, <code>{{subject}}</code>, <code>{{style}}</code> and <code>{{reference}}</code>.</p>
+      </section>
+
+      <section class="tab-panel" id="tab-settings" data-panel="settings">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Local app</p>
+            <h2>Settings</h2>
+            <p>The server only listens on this computer. No game files are overwritten.</p>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h3>Sprites root</h3>
+            <p>Select the folder containing the <code>player</code> and <code>monsters</code> directories.</p>
+            <label>
+              <span>Absolute path</span>
+              <input type="text" id="settings-root" spellcheck="false">
+            </label>
+            <button class="button primary" id="save-root">Validate and save</button>
+            <p class="settings-result" id="settings-root-result"></p>
+          </div>
+          <div class="settings-card">
+            <h3>Safe export behaviour</h3>
+            <ul>
+              <li>Every required image is revalidated before export.</li>
+              <li>New folders are assembled in a temporary staging directory.</li>
+              <li>An existing folder is never replaced or merged.</li>
+              <li>Godot creates its own <code>.import</code> files.</li>
+            </ul>
+          </div>
+          <div class="settings-card danger-card">
+            <h3>Stop the assistant</h3>
+            <p>This closes the local server. Unsaved draft uploads remain in the app workspace.</p>
+            <button class="button danger" id="quit-app">Stop local server</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="creation-template">
+    <div class="creation-page">
+      <div class="section-heading creation-heading">
+        <div>
+          <p class="eyebrow creation-eyebrow">New asset set</p>
+          <h2 class="creation-title"></h2>
+          <p class="creation-notes"></p>
+        </div>
+        <button class="button ghost reset-draft">Start fresh draft</button>
+      </div>
+
+      <div class="identity-card">
+        <div class="identity-grid">
+          <label>
+            <span>Name used in prompts</span>
+            <input class="character-name" type="text" placeholder="Bandit">
+          </label>
+          <label>
+            <span>Folder and filename prefix</span>
+            <input class="folder-slug" type="text" placeholder="bandit" spellcheck="false">
+          </label>
+        </div>
+        <label>
+          <span>Description</span>
+          <textarea class="character-description" rows="4" placeholder="A stocky human bandit wearing patched leather armour and carrying a chipped iron sword…"></textarea>
+        </label>
+        <div class="identity-actions">
+          <button class="button primary generate-prompts">Generate or refresh all prompts</button>
+          <span class="draft-id"></span>
+        </div>
+      </div>
+
+      <div class="progress-card">
+        <div class="progress-copy">
+          <strong class="progress-label">0 of 0 uploads ready</strong>
+          <span class="progress-detail">Complete every group before export.</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill"></div></div>
+      </div>
+
+      <div class="prompt-upload-grid"></div>
+
+      <div class="export-card">
+        <div>
+          <p class="eyebrow">Final validation</p>
+          <h3>Export directly into Depth Hammer</h3>
+          <p class="export-summary">Upload every required image to unlock export.</p>
+          <div class="export-result hidden"></div>
+        </div>
+        <button class="button primary large export-button" disabled>Export to folder</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="upload-card-template">
+    <article class="upload-card">
+      <header class="upload-card-header">
+        <div>
+          <span class="group-number"></span>
+          <h3 class="group-label"></h3>
+          <p class="group-expectation"></p>
+        </div>
+        <span class="completion-badge">Waiting</span>
+      </header>
+      <div class="prompt-box">
+        <div class="prompt-toolbar">
+          <span>AI image prompt</span>
+          <button class="text-button copy-prompt">Copy prompt</button>
+        </div>
+        <textarea class="generated-prompt" rows="9"></textarea>
+      </div>
+      <label class="drop-zone">
+        <input class="group-upload" type="file" accept="image/png,.png">
+        <span class="drop-icon">PNG</span>
+        <span class="drop-title">Choose generated spritesheet</span>
+        <span class="drop-help">The normalizer runs immediately. Upload again to replace this group.</span>
+      </label>
+      <div class="upload-message"></div>
+      <div class="processed-output"></div>
+    </article>
+  </template>
+
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+{
+  "recursive": false,
+  "defaults": {
+    "frames": 4,
+    "cell": 32,
+    "source_cols": null,
+    "source_rows": null,
+    "blob_detect": true,
+    "fit": true,
+    "allow_upscale": false,
+    "align_hor": "center",
+    "align_ver": "bottom",
+    "offset_x": 0,
+    "offset_y": 0,
+    "alpha_threshold": 0,
+    "allow_missing": false,
+    "debug_preview": null,
+    "print_debug": false,
+    "row_tolerance": 12,
+    "min_blob_area": 1564,
+    "reverse": false,
+    "verbose": false
+  },
+  "rules": [
+    {
+      "suffix": "_death.png",
+      "frames": 8,
+      "required": false
+    },
+    {
+      "suffix": "_deathfire.png",
+      "frames": 8,
+      "required": false
+    },
+    {
+      "suffix": "_melee_down.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_melee_left.png",
+      "frames": 4,
+      "reverse": true,
+      "required": false
+    },
+    {
+      "suffix": "_melee_up.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_melee_right.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_wake.png",
+      "frames": 8,
+      "required": false
+    },
+    {
+      "suffix": "_walk_down.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_walk_left.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_walk_right.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_walk_up.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_cast_down.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_cast_left.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_cast_right.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_cast_up.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_mine_down.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_mine_left.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_mine_right.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_mine_up.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_shoot_down.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_shoot_left.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_shoot_right.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_shoot_up.png",
+      "frames": 4,
+      "required": false
+    },
+    {
+      "suffix": "_rest.png",
+      "frames": 8,
+      "required": false
+    }
+  ]
+}
