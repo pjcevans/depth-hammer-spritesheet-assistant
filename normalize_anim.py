@@ -626,6 +626,32 @@ def clear_fully_transparent_rgb(image: Image.Image) -> Image.Image:
     return Image.merge("RGBA", (r, g, b, a))
 
 
+def resize_rgba_canvas(image: Image.Image, size: tuple[int, int], *, pixel_art: bool = False) -> Image.Image:
+    """Resize a complete transparent canvas with the shrinker's alpha-safe path.
+
+    The assistant's crop tool uses this for its 256px examine image and again
+    for the derived 32px sprite.  Keeping it here means those images use the
+    same premultiplied-alpha, gamma-correct downscaling as animation frames.
+    """
+
+    working = clear_fully_transparent_rgb(image)
+    if working.size == size:
+        resized = working.copy()
+    else:
+        scale = min(size[0] / max(1, working.width), size[1] / max(1, working.height))
+        resample = Image.Resampling.LANCZOS if scale < 1.0 else Image.Resampling.BICUBIC
+        if np is not None:
+            resized = resize_rgba_alpha_aware_numpy(working, size, resample, gamma_correct=True)
+        else:
+            resized = working.resize(size, resample=resample)
+
+    if pixel_art:
+        resized = ImageEnhance.Sharpness(resized).enhance(1.45)
+        resized = quantize_rgba_colours(resized, 48)
+        resized = cleanup_alpha(resized, low_cutoff=6, high_cutoff=250, hard_alpha=False)
+    return clear_fully_transparent_rgb(resized)
+
+
 def cleanup_alpha(image: Image.Image, low_cutoff: int, high_cutoff: int, hard_alpha: bool) -> Image.Image:
     rgba = ensure_rgba(image)
     r, g, b, a = rgba.split()

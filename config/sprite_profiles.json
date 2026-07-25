@@ -11,23 +11,13 @@
       "groups": [
         {
           "id": "base",
-          "label": "Base sprite",
+          "label": "Source artwork and crop",
           "prompt_key": "base",
-          "mode": "normalize",
+          "mode": "crop_pair",
           "source_frames": 1,
           "outputs": [
-            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500}
-          ]
-        },
-        {
-          "id": "large",
-          "label": "Large examine image",
-          "prompt_key": "large",
-          "mode": "passthrough",
-          "source_frames": 1,
-          "minimum_size": [64, 64],
-          "outputs": [
-            {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500}
+            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500, "size": [32, 32]},
+            {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500, "size": [256, 256]}
           ]
         },
         {
@@ -36,6 +26,7 @@
           "prompt_key": "walk",
           "mode": "normalize_split",
           "source_frames": 16,
+          "grid_hint": [4, 4],
           "outputs": [
             {"suffix": "_walk_up.png", "frames": 4, "start": 0, "frame_ms": 165},
             {"suffix": "_walk_right.png", "frames": 4, "start": 4, "frame_ms": 165},
@@ -49,6 +40,7 @@
           "prompt_key": "melee",
           "mode": "normalize_split",
           "source_frames": 16,
+          "grid_hint": [4, 4],
           "outputs": [
             {"suffix": "_melee_up.png", "frames": 4, "start": 0, "frame_ms": 125},
             {"suffix": "_melee_right.png", "frames": 4, "start": 4, "frame_ms": 125},
@@ -62,6 +54,7 @@
           "prompt_key": "death",
           "mode": "normalize",
           "source_frames": 8,
+          "grid_hint": [4, 2],
           "outputs": [
             {"suffix": "_death.png", "frames": 8, "start": 0, "frame_ms": 170}
           ]
@@ -72,6 +65,7 @@
           "prompt_key": "deathfire",
           "mode": "normalize",
           "source_frames": 8,
+          "grid_hint": [4, 2],
           "outputs": [
             {"suffix": "_deathfire.png", "frames": 8, "start": 0, "frame_ms": 150}
           ]
@@ -82,6 +76,8 @@
           "prompt_key": "wake",
           "mode": "normalize",
           "source_frames": 8,
+          "grid_hint": [4, 2],
+          "prefer_grid_reading_order": true,
           "outputs": [
             {"suffix": "_wake.png", "frames": 8, "start": 0, "frame_ms": 190}
           ]
@@ -97,23 +93,13 @@
       "groups": [
         {
           "id": "base",
-          "label": "Base sprite",
+          "label": "Source artwork and crop",
           "prompt_key": "base",
-          "mode": "normalize",
+          "mode": "crop_pair",
           "source_frames": 1,
           "outputs": [
-            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500}
-          ]
-        },
-        {
-          "id": "large",
-          "label": "Large examine image",
-          "prompt_key": "large",
-          "mode": "passthrough",
-          "source_frames": 1,
-          "minimum_size": [64, 64],
-          "outputs": [
-            {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500}
+            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500, "size": [32, 32]},
+            {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500, "size": [256, 256]}
           ]
         },
         {
@@ -122,6 +108,7 @@
           "prompt_key": "walk",
           "mode": "normalize_split",
           "source_frames": 16,
+          "grid_hint": [4, 4],
           "outputs": [
             {"suffix": "_walk_up.png", "frames": 4, "start": 0, "frame_ms": 165},
             {"suffix": "_walk_right.png", "frames": 4, "start": 4, "frame_ms": 165},
@@ -135,6 +122,7 @@
           "prompt_key": "melee",
           "mode": "normalize_split",
           "source_frames": 16,
+          "grid_hint": [4, 4],
           "outputs": [
             {"suffix": "_melee_up.png", "frames": 4, "start": 0, "frame_ms": 125},
             {"suffix": "_melee_right.png", "frames": 4, "start": 4, "frame_ms": 125},
@@ -148,6 +136,7 @@
           "prompt_key": "cast",
           "mode": "normalize_split",
           "source_frames": 16,
+          "grid_hint": [4, 4],
           "outputs": [
             {"suffix": "_cast_up.png", "frames": 4, "start": 0, "frame_ms": 145},
             {"suffix": "_cast_right.png", "frames": 4, "start": 4, "frame_ms": 145},
@@ -161,6 +150,7 @@
           "prompt_key": "mine",
           "mode": "normalize_split",
           "source_frames": 16,
+          "grid_hint": [4, 4],
           "outputs": [
             {"suffix": "_mine_up.png", "frames": 4, "start": 0, "frame_ms": 135},
             {"suffix": "_mine_right.png", "frames": 4, "start": 4, "frame_ms": 135},
@@ -174,6 +164,7 @@
           "prompt_key": "shoot",
           "mode": "normalize_split",
           "source_frames": 16,
+          "grid_hint": [4, 4],
           "outputs": [
             {"suffix": "_shoot_up.png", "frames": 4, "start": 0, "frame_ms": 145},
             {"suffix": "_shoot_right.png", "frames": 4, "start": 4, "frame_ms": 145},
@@ -187,6 +178,7 @@
           "prompt_key": "rest",
           "mode": "normalize",
           "source_frames": 8,
+          "grid_hint": [4, 2],
           "outputs": [
             {"suffix": "_rest.png", "frames": 8, "start": 0, "frame_ms": 230}
           ]
@@ -197,6 +189,7 @@
           "prompt_key": "death",
           "mode": "normalize",
           "source_frames": 8,
+          "grid_hint": [4, 2],
           "outputs": [
             {"suffix": "_death.png", "frames": 8, "start": 0, "frame_ms": 170}
           ]
@@ -207,6 +200,7 @@
           "prompt_key": "deathfire",
           "mode": "normalize",
           "source_frames": 8,
+          "grid_hint": [4, 2],
           "outputs": [
             {"suffix": "_deathfire.png", "frames": 8, "start": 0, "frame_ms": 150}
           ]

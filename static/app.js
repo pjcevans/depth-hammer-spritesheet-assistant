@@ -112,6 +112,41 @@ function draftMediaUrl(draftId, storedName) {
   return buildUrl("/draft-media", { draft: draftId, file: storedName, token: runToken });
 }
 
+function draftRawUrl(creator, groupId, rawVersion = "") {
+  return buildUrl("/draft-raw", {
+    draft: creator.draftId,
+    profile: creator.profileKey,
+    group: groupId,
+    version: rawVersion,
+    token: runToken,
+  });
+}
+
+function creatorIdentity(creator) {
+  return {
+    draft: creator.draftId,
+    profile: creator.profileKey,
+    name: creator.nameInput.value.trim(),
+    slug: creator.slugInput.value.trim(),
+    description: creator.descriptionInput.value.trim(),
+  };
+}
+
+function scheduleIdentitySave(creator) {
+  window.clearTimeout(creator.identitySaveTimer);
+  creator.identitySaveTimer = window.setTimeout(() => persistIdentity(creator), 350);
+}
+
+async function persistIdentity(creator) {
+  window.clearTimeout(creator.identitySaveTimer);
+  try {
+    const result = await api("/api/draft/identity", { method: "POST", json: creatorIdentity(creator) });
+    creator.draftStatus.identity = result.identity;
+  } catch (error) {
+    toast(`Could not save draft details: ${error.message}`, "error");
+  }
+}
+
 const activeAnimations = new Set();
 const visibilityObserver = "IntersectionObserver" in window
   ? new IntersectionObserver((entries) => {
@@ -242,6 +277,9 @@ function updateRootDisplay() {
 
 function groupExpectation(group) {
   const outputCount = group.outputs.length;
+  if (group.mode === "crop_pair") {
+    return "Upload one image at any size → crop once → 32x32 sprite + 256x256 examine image";
+  }
   if (group.mode === "passthrough") {
     return `Upload one transparent PNG → ${outputCount} examine image`;
   }
@@ -258,6 +296,217 @@ function buildPrompt(profile, group, name, description) {
     style: state.templates.style,
     reference: state.templates.reference,
   });
+}
+
+function detectionSettings(view) {
+  return {
+    mode: view.card.querySelector(".detect-mode").value,
+    columns: Number(view.card.querySelector(".detect-columns").value),
+    rows: Number(view.card.querySelector(".detect-rows").value),
+    alpha_threshold: Number(view.card.querySelector(".detect-alpha").value),
+    min_blob_area: Number(view.card.querySelector(".detect-area").value),
+    row_tolerance: Number(view.card.querySelector(".detect-row").value),
+  };
+}
+
+function setDetectionControls(view, settings = null) {
+  if (view.group.mode === "crop_pair" || view.group.mode === "passthrough") return;
+  const hint = view.group.grid_hint || [view.group.source_frames, 1];
+  const defaults = state.bootstrap.detection_defaults || {};
+  const value = settings || {
+    mode: "auto",
+    columns: hint[0],
+    rows: hint[1],
+    alpha_threshold: defaults.alpha_threshold ?? 0,
+    min_blob_area: defaults.min_blob_area ?? 64,
+    row_tolerance: defaults.row_tolerance ?? 12,
+  };
+  view.card.querySelector(".detect-mode").value = value.mode || "auto";
+  view.card.querySelector(".detect-columns").value = value.columns ?? hint[0];
+  view.card.querySelector(".detect-rows").value = value.rows ?? hint[1];
+  view.card.querySelector(".detect-alpha").value = value.alpha_threshold ?? 0;
+  view.card.querySelector(".detect-area").value = value.min_blob_area ?? 64;
+  view.card.querySelector(".detect-row").value = value.row_tolerance ?? 12;
+}
+
+function cropValues(view) {
+  return {
+    zoom: Number(view.card.querySelector(".crop-zoom").value),
+    pan_x: Number(view.card.querySelector(".crop-x").value),
+    pan_y: Number(view.card.querySelector(".crop-y").value),
+  };
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function updateCropLabels(view) {
+  const values = cropValues(view);
+  view.card.querySelector(".crop-zoom-value").textContent = `${Math.round(values.zoom * 100)}%`;
+  view.card.querySelector(".crop-x-value").textContent = `${Math.round(values.pan_x * 100)}%`;
+  view.card.querySelector(".crop-y-value").textContent = `${Math.round(values.pan_y * 100)}%`;
+}
+
+function drawCropPreview(view) {
+  updateCropLabels(view);
+  if (!view.cropImage || !view.cropImage.complete || !view.cropImage.naturalWidth) return;
+  const canvas = view.card.querySelector(".crop-canvas");
+  const context = canvas.getContext("2d");
+  const values = cropValues(view);
+  const fallback = [0, 0, view.cropImage.naturalWidth, view.cropImage.naturalHeight];
+  const box = view.cropBox && view.cropBox.length === 4 ? view.cropBox : fallback;
+  const sourceWidth = Math.max(1, box[2] - box[0]);
+  const sourceHeight = Math.max(1, box[3] - box[1]);
+  const scale = 0.9 * Math.min(canvas.width / sourceWidth, canvas.height / sourceHeight) * values.zoom;
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  const x = (canvas.width - drawWidth) / 2 + values.pan_x * canvas.width / 2;
+  const y = (canvas.height - drawHeight) / 2 + values.pan_y * canvas.height / 2;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(
+    view.cropImage,
+    box[0], box[1], sourceWidth, sourceHeight,
+    x, y, drawWidth, drawHeight,
+  );
+}
+
+function setCropControls(view, saved) {
+  const crop = saved.crop || { zoom: 1, pan_x: 0, pan_y: 0 };
+  view.card.querySelector(".crop-zoom").value = crop.zoom ?? 1;
+  view.card.querySelector(".crop-x").value = crop.pan_x ?? 0;
+  view.card.querySelector(".crop-y").value = crop.pan_y ?? 0;
+  view.cropBox = saved.crop_bbox || [0, 0, saved.source_width || 1, saved.source_height || 1];
+  if (view.cropRawVersion !== saved.raw_version) {
+    view.cropRawVersion = saved.raw_version;
+    const image = new Image();
+    view.cropImage = image;
+    image.addEventListener("load", () => drawCropPreview(view));
+    image.addEventListener("error", () => {
+      view.card.querySelector(".crop-status").textContent = "Could not load the crop source preview.";
+    });
+    image.src = draftRawUrl(view.creator, view.group.id, saved.raw_version || "");
+  }
+  drawCropPreview(view);
+}
+
+function wireCropControls(view) {
+  const card = view.card;
+  [".crop-zoom", ".crop-x", ".crop-y"].forEach((selector) => {
+    card.querySelector(selector).addEventListener("input", () => drawCropPreview(view));
+  });
+  card.querySelector(".crop-reset").addEventListener("click", () => {
+    card.querySelector(".crop-zoom").value = 1;
+    card.querySelector(".crop-x").value = 0;
+    card.querySelector(".crop-y").value = 0;
+    drawCropPreview(view);
+  });
+  card.querySelector(".apply-crop").addEventListener("click", () => reprocessGroup(view, cropValues(view)));
+
+  const wrap = card.querySelector(".crop-canvas-wrap");
+  const canvas = card.querySelector(".crop-canvas");
+  canvas.addEventListener("pointerdown", (event) => {
+    canvas.setPointerCapture(event.pointerId);
+    wrap.classList.add("dragging");
+    const values = cropValues(view);
+    view.cropDrag = { x: event.clientX, y: event.clientY, panX: values.pan_x, panY: values.pan_y };
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!view.cropDrag) return;
+    const bounds = canvas.getBoundingClientRect();
+    const panX = clamp(view.cropDrag.panX + ((event.clientX - view.cropDrag.x) / bounds.width) * 2, -2, 2);
+    const panY = clamp(view.cropDrag.panY + ((event.clientY - view.cropDrag.y) / bounds.height) * 2, -2, 2);
+    card.querySelector(".crop-x").value = panX;
+    card.querySelector(".crop-y").value = panY;
+    drawCropPreview(view);
+  });
+  const endDrag = () => {
+    view.cropDrag = null;
+    wrap.classList.remove("dragging");
+  };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const input = card.querySelector(".crop-zoom");
+    input.value = clamp(Number(input.value) * Math.exp(-event.deltaY * 0.0015), 0.1, 6);
+    drawCropPreview(view);
+  }, { passive: false });
+}
+
+async function reprocessGroup(view, processing = null) {
+  const button = view.group.mode === "crop_pair"
+    ? view.card.querySelector(".apply-crop")
+    : view.card.querySelector(".reprocess-group");
+  button.disabled = true;
+  const oldText = button.textContent;
+  button.textContent = "Processing…";
+  try {
+    const result = await api("/api/reprocess", {
+      method: "POST",
+      json: {
+        draft: view.creator.draftId,
+        profile: view.creator.profileKey,
+        group: view.group.id,
+        processing: processing || detectionSettings(view),
+      },
+    });
+    view.creator.draftStatus = result;
+    renderCreatorDraft(view.creator);
+    toast(`${view.group.label} reprocessed.`);
+  } catch (error) {
+    toast(error.message, "error");
+    await loadCreatorDraft(view.creator, false);
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+  }
+}
+
+function saveDetailsFile(creator) {
+  const details = {
+    version: 1,
+    profile: creator.profileKey,
+    name: creator.nameInput.value.trim(),
+    slug: creator.slugInput.value.trim(),
+    description: creator.descriptionInput.value.trim(),
+  };
+  const blob = new Blob([`${JSON.stringify(details, null, 2)}\n`], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${details.slug || creator.profileKey}-sprite-details.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  persistIdentity(creator);
+  toast("Sprite details save file created.");
+}
+
+async function loadDetailsFile(creator, file) {
+  try {
+    const details = JSON.parse(await file.text());
+    if (!details || typeof details !== "object") throw new Error("The save file does not contain an object.");
+    if (details.profile && details.profile !== creator.profileKey) {
+      throw new Error(`This is a ${details.profile} save, not a ${creator.profileKey} save.`);
+    }
+    creator.nameInput.value = typeof details.name === "string" ? details.name : "";
+    creator.slugInput.value = slugify(typeof details.slug === "string" ? details.slug : creator.nameInput.value);
+    creator.descriptionInput.value = typeof details.description === "string" ? details.description : "";
+    creator.slugTouched = true;
+    saveCreatorForm(creator);
+    await persistIdentity(creator);
+    creator.cards.forEach(({ group, promptArea }) => {
+      promptArea.value = buildPrompt(creator.profile, group, creator.nameInput.value, creator.descriptionInput.value);
+    });
+    renderCreatorDraft(creator);
+    toast("Sprite details loaded.");
+  } catch (error) {
+    toast(`Could not load details: ${error.message}`, "error");
+  }
 }
 
 function renderCreation(profileKey) {
@@ -282,6 +531,7 @@ function renderCreation(profileKey) {
     slugInput: page.querySelector(".folder-slug"),
     descriptionInput: page.querySelector(".character-description"),
     slugTouched: Boolean(storedForm.slugTouched),
+    identitySaveTimer: null,
   };
   state.creators[profileKey] = creator;
   creator.nameInput.value = storedForm.name || "";
@@ -301,18 +551,34 @@ function renderCreation(profileKey) {
     promptArea.value = buildPrompt(profile, group, creator.nameInput.value, creator.descriptionInput.value);
     card.querySelector(".copy-prompt").addEventListener("click", () => copyText(promptArea.value));
     const input = card.querySelector(".group-upload");
+    const isCrop = group.mode === "crop_pair";
+    input.accept = isCrop ? "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" : "image/png,.png";
+    card.querySelector(".drop-icon").textContent = isCrop ? "IMAGE" : "PNG";
+    card.querySelector(".drop-title").textContent = isCrop ? "Choose source artwork" : "Choose generated spritesheet";
+    card.querySelector(".drop-help").textContent = isCrop
+      ? "PNG, JPEG or WebP at any size. The crop tool creates both final still images."
+      : "Automatic detection runs immediately. Upload again to replace this group.";
     input.addEventListener("change", () => {
       const file = input.files && input.files[0];
       if (file) uploadGroup(creator, group, file);
       input.value = "";
     });
-    creator.cards.set(group.id, { card, group, promptArea, input });
+    const view = { card, group, promptArea, input, creator, cropImage: null, cropRawVersion: null };
+    creator.cards.set(group.id, view);
+    if (isCrop) {
+      wireCropControls(view);
+    } else if (group.mode !== "passthrough") {
+      card.querySelector(".detection-controls").classList.remove("hidden");
+      setDetectionControls(view);
+      card.querySelector(".reprocess-group").addEventListener("click", () => reprocessGroup(view));
+    }
     grid.append(cardFragment);
   });
 
   creator.nameInput.addEventListener("input", () => {
     if (!creator.slugTouched) creator.slugInput.value = slugify(creator.nameInput.value);
     saveCreatorForm(creator);
+    scheduleIdentitySave(creator);
     updateCreatorProgress(creator);
     renderCreatorDraft(creator);
   });
@@ -320,16 +586,26 @@ function renderCreation(profileKey) {
     creator.slugInput.value = slugify(creator.slugInput.value);
     creator.slugTouched = true;
     saveCreatorForm(creator);
+    scheduleIdentitySave(creator);
     updateCreatorProgress(creator);
     renderCreatorDraft(creator);
   });
   creator.descriptionInput.addEventListener("input", () => {
     saveCreatorForm(creator);
+    scheduleIdentitySave(creator);
     updateCreatorProgress(creator);
   });
   page.querySelector(".generate-prompts").addEventListener("click", () => generateCreatorPrompts(creator));
   page.querySelector(".reset-draft").addEventListener("click", () => resetCreatorDraft(creator));
   page.querySelector(".export-button").addEventListener("click", () => exportCreator(creator));
+  page.querySelector(".save-details").addEventListener("click", () => saveDetailsFile(creator));
+  const loadInput = page.querySelector(".load-details-input");
+  page.querySelector(".load-details").addEventListener("click", () => loadInput.click());
+  loadInput.addEventListener("change", () => {
+    const file = loadInput.files && loadInput.files[0];
+    if (file) loadDetailsFile(creator, file);
+    loadInput.value = "";
+  });
   updateCreatorProgress(creator);
 }
 
@@ -344,6 +620,7 @@ function generateCreatorPrompts(creator) {
     promptArea.value = buildPrompt(creator.profile, group, name, description);
   });
   saveCreatorForm(creator);
+  scheduleIdentitySave(creator);
   toast("All prompts refreshed.");
 }
 
@@ -361,20 +638,37 @@ async function copyText(text) {
   toast("Prompt copied.");
 }
 
-async function loadCreatorDraft(creator) {
+async function loadCreatorDraft(creator, notify = true) {
   try {
     const result = await api(buildUrl("/api/draft", { draft: creator.draftId, profile: creator.profileKey }));
     creator.draftStatus = result;
+    const identity = result.identity || {};
+    if (identity.name || identity.slug || identity.description) {
+      creator.nameInput.value = identity.name || "";
+      creator.slugInput.value = identity.slug || "";
+      creator.descriptionInput.value = identity.description || "";
+      creator.slugTouched = Boolean(identity.slug);
+      saveCreatorForm(creator);
+      creator.cards.forEach(({ group, promptArea }) => {
+        promptArea.value = buildPrompt(
+          creator.profile,
+          group,
+          creator.nameInput.value,
+          creator.descriptionInput.value,
+        );
+      });
+    }
     renderCreatorDraft(creator);
   } catch (error) {
-    toast(`Could not load ${creator.profile.label.toLowerCase()} draft: ${error.message}`, "error");
+    if (notify) toast(`Could not load ${creator.profile.label.toLowerCase()} draft: ${error.message}`, "error");
   }
 }
 
 async function uploadGroup(creator, group, file) {
   const view = creator.cards.get(group.id);
-  if (!/\.png$/i.test(file.name)) {
-    toast("Choose a PNG file.", "error");
+  const cropMode = group.mode === "crop_pair";
+  if ((!cropMode && !/\.png$/i.test(file.name)) || (cropMode && !/\.(png|jpe?g|webp)$/i.test(file.name))) {
+    toast(cropMode ? "Choose a PNG, JPEG or WebP image." : "Choose a PNG file.", "error");
     return;
   }
   view.input.disabled = true;
@@ -382,15 +676,17 @@ async function uploadGroup(creator, group, file) {
   view.card.querySelector(".completion-badge").textContent = "Processing";
   const message = view.card.querySelector(".upload-message");
   message.className = "upload-message";
-  message.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} MB · running normalizer…`;
+  message.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} MB · ${cropMode ? "preparing crop…" : "detecting sprites…"}`;
   try {
-    const result = await api(buildUrl("/api/upload", {
+    const params = {
       draft: creator.draftId,
       profile: creator.profileKey,
       group: group.id,
-    }), {
+      ...(cropMode ? {} : detectionSettings(view)),
+    };
+    const result = await api(buildUrl("/api/upload", params), {
       method: "POST",
-      headers: { "Content-Type": "image/png" },
+      headers: { "Content-Type": file.type || "application/octet-stream" },
       body: file,
     });
     creator.draftStatus = result;
@@ -402,6 +698,7 @@ async function uploadGroup(creator, group, file) {
     message.className = "upload-message error-text";
     message.textContent = error.message;
     toast(error.message, "error");
+    await loadCreatorDraft(creator, false);
   } finally {
     view.input.disabled = false;
   }
@@ -416,12 +713,42 @@ function renderCreatorDraft(creator) {
     const output = view.card.querySelector(".processed-output");
     view.card.classList.remove("ready", "error");
     output.replaceChildren();
+    if (view.group.mode === "crop_pair") {
+      const cropEditor = view.card.querySelector(".crop-editor");
+      cropEditor.classList.toggle("hidden", !saved || !saved.raw_name);
+      if (saved && saved.raw_name) {
+        const cropSignature = `${saved.raw_version || ""}:${JSON.stringify(saved.crop || {})}`;
+        if (view.cropSignature !== cropSignature) {
+          view.cropSignature = cropSignature;
+          setCropControls(view, saved);
+        } else {
+          drawCropPreview(view);
+        }
+        view.card.querySelector(".crop-status").textContent = saved.ready
+          ? "Crop applied. Both the 32x32 sprite and 256x256 examine asset are shown below."
+          : "Adjust the crop and choose Apply crop to try again.";
+      }
+    } else if (view.group.mode !== "passthrough") {
+      const reprocess = view.card.querySelector(".reprocess-group");
+      reprocess.disabled = !saved || !saved.raw_name;
+      if (saved && saved.settings) {
+        const settingsSignature = JSON.stringify(saved.settings);
+        if (view.settingsSignature !== settingsSignature) {
+          view.settingsSignature = settingsSignature;
+          setDetectionControls(view, saved.settings);
+        }
+      }
+      view.card.querySelector(".detection-method").textContent = saved && saved.processing_method
+        ? `Last result: ${saved.processing_method}`
+        : "No image processed yet.";
+    }
     if (saved && saved.ready) {
       view.card.classList.add("ready");
       badge.textContent = "Ready";
       message.className = "upload-message";
       const warningText = (saved.warnings || []).join(" ");
-      message.textContent = `Source ${saved.source_width}x${saved.source_height} processed successfully.${warningText ? ` ${warningText}` : ""}`;
+      const method = saved.processing_method ? ` · ${saved.processing_method}` : "";
+      message.textContent = `Source ${saved.source_width}x${saved.source_height} processed successfully${method}.${warningText ? ` ${warningText}` : ""}`;
       saved.outputs.forEach((record) => {
         const item = document.createElement("div");
         item.className = "processed-item";
@@ -497,6 +824,7 @@ async function resetCreatorDraft(creator) {
   creator.draftStatus = { groups: {}, missing_groups: creator.profile.groups.map((group) => group.id), ready: false };
   creator.page.querySelector(".export-result").classList.add("hidden");
   renderCreatorDraft(creator);
+  persistIdentity(creator);
   toast("Fresh draft started.");
 }
 
@@ -512,10 +840,16 @@ async function exportCreator(creator) {
   try {
     const result = await api("/api/export", {
       method: "POST",
-      json: { draft: creator.draftId, profile: creator.profileKey, slug: creator.slugInput.value.trim() },
+      json: {
+        draft: creator.draftId,
+        profile: creator.profileKey,
+        slug: creator.slugInput.value.trim(),
+        name: creator.nameInput.value.trim(),
+        description: creator.descriptionInput.value.trim(),
+      },
     });
     resultBox.classList.remove("hidden");
-    resultBox.textContent = `Created ${result.relative_path} with ${result.file_count} PNGs. ${result.note}`;
+    resultBox.textContent = `Created ${result.relative_path} with ${result.file_count} game PNGs and ${result.source_relative_path} with ${result.source_file_count} full-size source PNGs. ${result.note}`;
     toast(`Exported ${result.relative_path}.`);
     loadLibrary();
   } catch (error) {
@@ -557,7 +891,11 @@ function filteredEntities() {
   const profile = document.getElementById("library-profile-filter").value;
   return state.library.filter((entity) => {
     const profileMatch = profile === "all" || entity.profile === profile;
-    const searchMatch = !search || entity.name.toLowerCase().includes(search) || entity.relative_path.toLowerCase().includes(search);
+    const haystack = [entity.name, entity.display_name, entity.description, entity.relative_path]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const searchMatch = !search || haystack.includes(search);
     return profileMatch && searchMatch;
   });
 }
@@ -581,13 +919,15 @@ function renderEntityList() {
     const button = document.createElement("button");
     button.className = `entity-button ${entity.relative_path === state.librarySelected ? "active" : ""}`;
     const name = document.createElement("strong");
-    name.textContent = entity.name;
+    name.textContent = entity.display_name || entity.name;
     const count = document.createElement("span");
     count.className = "count";
     count.textContent = String(entity.asset_count);
     const type = document.createElement("span");
     type.className = "type";
-    type.textContent = entity.profile_label;
+    type.textContent = entity.display_name && entity.display_name !== entity.name
+      ? `${entity.profile_label} · ${entity.name}`
+      : entity.profile_label;
     button.append(name, count, type);
     button.addEventListener("click", () => {
       state.librarySelected = entity.relative_path;
@@ -605,11 +945,66 @@ function renderLibraryDetail(entity) {
   const header = document.createElement("div");
   header.className = "detail-header";
   const heading = document.createElement("h3");
-  heading.textContent = entity.name;
+  heading.textContent = entity.display_name || entity.name;
   const path = document.createElement("p");
   path.textContent = `${entity.relative_path} · ${entity.asset_count} PNG${entity.asset_count === 1 ? "" : "s"}`;
   header.append(heading, path);
   detail.append(header);
+  const metadata = document.createElement("div");
+  metadata.className = "library-metadata";
+  const nameLabel = document.createElement("label");
+  const nameTitle = document.createElement("span");
+  nameTitle.textContent = "Name";
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.maxLength = 120;
+  nameInput.value = entity.display_name || entity.name;
+  nameInput.placeholder = entity.name;
+  nameLabel.append(nameTitle, nameInput);
+  const descriptionLabel = document.createElement("label");
+  const descriptionTitle = document.createElement("span");
+  descriptionTitle.textContent = "Description";
+  const descriptionInput = document.createElement("textarea");
+  descriptionInput.rows = 3;
+  descriptionInput.maxLength = 5000;
+  descriptionInput.value = entity.description || "";
+  descriptionInput.placeholder = "No description saved yet — add one here for future prompt generation.";
+  descriptionLabel.append(descriptionTitle, descriptionInput);
+  const save = document.createElement("button");
+  save.className = "button primary";
+  save.textContent = "Save details";
+  const note = document.createElement("p");
+  note.className = "metadata-note";
+  note.textContent = entity.metadata_present
+    ? "Saved with the Sprite Library and editable at any time."
+    : "This folder has no saved description yet. Add one now and it will appear on future library scans.";
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    save.textContent = "Saving…";
+    try {
+      await api("/api/library/metadata", {
+        method: "POST",
+        json: {
+          profile: entity.profile,
+          folder: entity.folder || entity.name,
+          name: nameInput.value,
+          description: descriptionInput.value,
+        },
+      });
+      entity.display_name = nameInput.value.trim() || entity.name;
+      entity.description = descriptionInput.value.trim();
+      entity.metadata_present = Boolean(nameInput.value.trim() || descriptionInput.value.trim());
+      toast(`Details saved for ${entity.display_name}.`);
+      renderEntityList();
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      save.disabled = false;
+      save.textContent = "Save details";
+    }
+  });
+  metadata.append(nameLabel, descriptionLabel, save, note);
+  detail.append(metadata);
   const grid = document.createElement("div");
   grid.className = "asset-grid";
   if (!entity.assets.length) {

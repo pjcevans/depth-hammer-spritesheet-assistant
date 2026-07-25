@@ -17,7 +17,8 @@ depth-hammer\assets\
 │  ├─ monsters\
 │  └─ player\
 └─ depth-hammer-spritesheet-assistant\
-   └─ run_spritesheet_assistant.bat
+   ├─ run_spritesheet_assistant.bat
+   └─ source_assets\
 ```
 
 If the app is stored elsewhere, open **Settings** and enter the absolute path to `depth-hammer\assets\entity_sprites\default`.
@@ -26,10 +27,12 @@ If the app is stored elsewhere, open **Settings** and enter the absolute path to
 
 1. Open **New Monster** or **New Player**.
 2. Enter the name, lowercase folder prefix and visual description.
-3. Generate the prompts and copy each prompt into your image-generation conversation. Use the same base reference image for every animation prompt.
-4. Upload the returned PNG for each prompt group. The normaliser runs immediately and shows the finished animations.
-5. Resolve any frame-count or transparency errors.
-6. Choose **Export to folder**.
+3. Optionally choose **Save details file** to keep a portable JSON copy of the name, folder and description. **Load details file** restores it later. The live draft is also saved automatically.
+4. Generate the prompts and copy each prompt into your image-generation conversation. Use the same base reference image for every animation prompt.
+5. Upload one PNG, JPEG or WebP source artwork image. Drag, scale and position it in the crop tool; one crop produces the 256×256 `_large` image and the 32×32 base sprite.
+6. Upload the returned PNG for each animation group. The normaliser runs immediately and shows the finished animations.
+7. Resolve any remaining frame-count or transparency errors. Open **Sprite detection controls** to adjust the grid, alpha threshold, component area or row tolerance and reprocess the original upload without uploading it again.
+8. Choose **Export to folder**. The game-ready files go to `entity_sprites\default`, and the untouched full-size uploads go to `depth-hammer-spritesheet-assistant\source_assets\<folder-name>`.
 
 Combined directional sheets are expected in this order:
 
@@ -37,17 +40,23 @@ Combined directional sheets are expected in this order:
 north frames, east frames, west frames, south frames
 ```
 
-A 16-sprite directional upload becomes four 4-frame Godot strips. Eight-frame death, fire-death, wake and rest uploads remain eight-frame strips. The large examine image is preserved at its uploaded resolution and converted to RGBA.
+A 16-sprite directional upload becomes four 4-frame Godot strips. Eight-frame death, fire-death, wake and rest uploads remain eight-frame strips. Wake sheets automatically use the best matching grid and are always flattened in standard reading order: left-to-right across the top row, then left-to-right across each following row. Other animations first use connected-sprite detection; if detached pieces such as floating fists produce too many blobs, the app ranks valid grid layouts by occupancy, clear boundaries and image geometry. This lets both 4×2 and single-row 8×1 sheets resolve correctly.
+
+## Sprite Library details
+
+Every existing player and monster folder has editable **Name** and **Description** fields in the Sprite Library. New exports populate them automatically. Older folders show empty description fields ready to fill in. These details are stored in `entity_sprites\default\sprite_library_metadata.json`, outside the assistant folder, so replacing or updating the app does not discard them.
 
 ## Export safety
 
 - Monster exports contain 13 PNGs: base, large, and 11 animation strips.
 - Player exports contain 25 PNGs: base, large, and 23 animation strips.
-- Every processed frame must be present, readable and use real transparency.
+- Every export also keeps one full-resolution PNG per upload group in `source_assets\<folder-name>`, using names such as `bandit.png`, `bandit_walk.png` and `bandit_death.png`.
+- Every processed animation frame must be present, readable and use real transparency. The crop tool warns, but does not block, when source artwork is fully opaque.
 - Final animation cells are exactly 32×32.
 - The destination folder must not already exist, including a case-only name match.
 - Files are staged and verified before the destination folder becomes visible.
 - Existing folders are never merged, replaced or partially updated.
+- Existing full-size source folders are never overwritten.
 - `.import` files are deliberately not created; Godot generates them.
 
 ## Editing prompts and profiles
@@ -60,11 +69,11 @@ The normaliser settings are in `mob_anim_batch.json`. The supplied defaults reta
 
 ## Drafts
 
-Uploads and processed previews are kept under `workspace\drafts`. This directory and `.venv` are ignored by Git. **Start fresh draft** removes only that draft's temporary files; it never touches exported game assets.
+Uploads, crop settings, detection settings, name, folder and description are kept under `workspace\drafts`. This directory, `.venv` and `source_assets` are ignored by Git. **Start fresh draft** removes only that draft's temporary files; it never touches exported game or full-size source assets.
 
 ## Troubleshooting
 
-- **Wrong number of frames detected:** ensure every sprite is separated by transparent space and there are no grid lines, labels, scenery or large detached effects.
+- **Wrong number of frames detected:** leave detection on **Automatic** first. For an evenly arranged sheet, choose **Fixed grid** and set columns × rows to the required count. Connected-sprite controls remain available for unusually spaced sheets.
 - **Transparent background required:** remove any solid or checkerboard background from the uploaded PNG.
 - **Sprites root not found:** set it explicitly in **Settings**.
 - **First-run installation failed:** delete `.venv`, check Python and internet access, then run the batch file again.

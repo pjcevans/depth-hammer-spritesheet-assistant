@@ -155,7 +155,7 @@
         <div class="identity-grid">
           <label>
             <span>Name used in prompts</span>
-            <input class="character-name" type="text" placeholder="Bandit">
+            <input class="character-name" type="text" maxlength="120" placeholder="Bandit">
           </label>
           <label>
             <span>Folder and filename prefix</span>
@@ -164,10 +164,13 @@
         </div>
         <label>
           <span>Description</span>
-          <textarea class="character-description" rows="4" placeholder="A stocky human bandit wearing patched leather armour and carrying a chipped iron sword…"></textarea>
+          <textarea class="character-description" rows="4" maxlength="5000" placeholder="A stocky human bandit wearing patched leather armour and carrying a chipped iron sword…"></textarea>
         </label>
         <div class="identity-actions">
           <button class="button primary generate-prompts">Generate or refresh all prompts</button>
+          <button class="button secondary save-details">Save details file</button>
+          <button class="button secondary load-details">Load details file</button>
+          <input class="load-details-input" type="file" accept="application/json,.json" hidden>
           <span class="draft-id"></span>
         </div>
       </div>
@@ -217,6 +220,43 @@
         <span class="drop-title">Choose generated spritesheet</span>
         <span class="drop-help">The normalizer runs immediately. Upload again to replace this group.</span>
       </label>
+      <div class="crop-editor hidden">
+        <div class="crop-workspace">
+          <div>
+            <div class="crop-canvas-wrap">
+              <canvas class="crop-canvas" width="320" height="320" aria-label="Crop preview"></canvas>
+              <span class="crop-frame-label">Large asset crop</span>
+            </div>
+            <p class="crop-help">Drag the artwork to position it. Use the wheel or Scale control to make a rat smaller or a dragon fill the frame.</p>
+          </div>
+          <div class="crop-controls">
+            <label><span>Scale <output class="crop-zoom-value">100%</output></span><input class="crop-zoom" type="range" min="0.1" max="6" step="0.01" value="1"></label>
+            <label><span>Left / right <output class="crop-x-value">0%</output></span><input class="crop-x" type="range" min="-2" max="2" step="0.01" value="0"></label>
+            <label><span>Up / down <output class="crop-y-value">0%</output></span><input class="crop-y" type="range" min="-2" max="2" step="0.01" value="0"></label>
+            <div class="button-row">
+              <button class="button ghost crop-reset" type="button">Reset crop</button>
+              <button class="button primary apply-crop" type="button">Apply crop</button>
+            </div>
+            <p class="crop-status">The same crop makes a 256x256 examine image and a 32x32 base sprite.</p>
+          </div>
+        </div>
+      </div>
+      <details class="detection-controls hidden">
+        <summary>Sprite detection controls</summary>
+        <p class="detection-intro">Automatic mode tries connected sprites first, then groups the image into an even grid if a creature has detached parts.</p>
+        <div class="detection-grid">
+          <label><span>Method</span><select class="detect-mode"><option value="auto">Automatic (recommended)</option><option value="blobs">Connected sprites</option><option value="grid">Fixed grid</option></select></label>
+          <label><span>Grid columns</span><input class="detect-columns" type="number" min="1" max="32" step="1"></label>
+          <label><span>Grid rows</span><input class="detect-rows" type="number" min="1" max="32" step="1"></label>
+          <label><span>Alpha threshold</span><input class="detect-alpha" type="number" min="0" max="254" step="1"></label>
+          <label><span>Minimum component area</span><input class="detect-area" type="number" min="1" max="100000" step="1"></label>
+          <label><span>Row tolerance</span><input class="detect-row" type="number" min="0" max="500" step="1"></label>
+        </div>
+        <div class="detection-actions">
+          <button class="button secondary reprocess-group" type="button">Reprocess current upload</button>
+          <span class="detection-method"></span>
+        </div>
+      </details>
       <div class="upload-message"></div>
       <div class="processed-output"></div>
     </article>

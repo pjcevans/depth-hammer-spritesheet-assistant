@@ -48,6 +48,43 @@ def finished_strip(frames: int) -> Image.Image:
     return image
 
 
+def detached_creature_sheet(frame_count: int = 16, columns: int = 4) -> Image.Image:
+    """Cells whose tornado body and two fists are separate blobs."""
+    cell = 190
+    rows = (frame_count + columns - 1) // columns
+    image = Image.new("RGBA", (cell * columns, cell * rows), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    for index in range(frame_count):
+        col = index % columns
+        row = index // columns
+        x = col * cell
+        y = row * cell
+        colour = ((index * 31 + 60) % 220 + 20, (index * 47 + 70) % 210 + 20, 170, 255)
+        draw.rectangle((x + 68, y + 45, x + 121, y + 145), fill=colour)
+        draw.rectangle((x + 8, y + 68, x + 49, y + 111), fill=colour)
+        draw.rectangle((x + 140, y + 68, x + 181, y + 111), fill=colour)
+    return image
+
+
+def variable_height_wake_sheet() -> Image.Image:
+    """A 4x2 wake sheet whose changing heights defeat top-edge blob sorting."""
+    columns = 4
+    rows = 2
+    cell_width = 160
+    cell_height = 220
+    heights = [44, 88, 132, 176, 180, 184, 188, 192]
+    image = Image.new("RGBA", (columns * cell_width, rows * cell_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    for index, height in enumerate(heights):
+        column = index % columns
+        row = index // columns
+        left = column * cell_width + 45
+        bottom = (row + 1) * cell_height - 18
+        colour = (30 + index * 24, 70 + index * 17, 190 - index * 13, 255)
+        draw.rectangle((left, bottom - height, left + 69, bottom), fill=colour)
+    return image
+
+
 class SpritesheetAssistantTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -68,6 +105,8 @@ class SpritesheetAssistantTests(unittest.TestCase):
         self.assertEqual(len(player), 25)
         self.assertEqual(sum(1 for item in mob if item["frames"] > 1), 11)
         self.assertEqual(sum(1 for item in player if item["frames"] > 1), 23)
+        self.assertEqual(len(self.catalog.profile("mob")["groups"]), 6)
+        self.assertEqual(len(self.catalog.profile("player")["groups"]), 9)
 
     def test_normalizer_api_accepts_arbitrary_frame_count(self) -> None:
         source = self.base / "three.png"
@@ -109,10 +148,110 @@ class SpritesheetAssistantTests(unittest.TestCase):
         self.assertEqual(len(outputs), 4)
         self.assertEqual({(item["width"], item["height"]) for item in outputs}, {(128, 32)})
 
+    def test_disconnected_creature_automatically_uses_grid(self) -> None:
+        result = self.manager.process_upload(
+            "draft-fists-0001",
+            "mob",
+            "walk",
+            png_bytes(detached_creature_sheet()),
+        )
+        saved = result["groups"]["walk"]
+        self.assertTrue(saved["ready"])
+        self.assertEqual(saved["detection_method"], "grid_auto")
+        self.assertEqual(saved["processing_method"], "Automatic fallback: 4×4 grid")
+        self.assertEqual(len(saved["outputs"]), 4)
+
+    def test_automatic_grid_infers_horizontal_eight_frame_sheet(self) -> None:
+        horizontal = self.manager.process_upload(
+            "draft-horizontal-eight",
+            "mob",
+            "death",
+            png_bytes(detached_creature_sheet(8, columns=8)),
+        )["groups"]["death"]
+        self.assertTrue(horizontal["ready"])
+        self.assertEqual(horizontal["processing_method"], "Automatic fallback: 8×1 grid")
+        self.assertEqual((horizontal["outputs"][0]["width"], horizontal["outputs"][0]["height"]), (256, 32))
+
+        standard = self.manager.process_upload(
+            "draft-standard-eight",
+            "mob",
+            "death",
+            png_bytes(detached_creature_sheet(8, columns=4)),
+        )["groups"]["death"]
+        self.assertTrue(standard["ready"])
+        self.assertEqual(standard["processing_method"], "Automatic fallback: 4×2 grid")
+
+    def test_wake_uses_row_major_grid_order_when_pose_heights_change(self) -> None:
+        source = self.base / "wake-source.png"
+        expected = self.base / "wake-expected.png"
+        variable_height_wake_sheet().save(source)
+        normalize_uploaded_sheet(
+            source,
+            expected,
+            frames=8,
+            cell=32,
+            config_overrides={
+                **self.manager.normalizer_defaults,
+                "source_cols": 4,
+                "source_rows": 2,
+            },
+        )
+
+        saved = self.manager.process_upload(
+            "draft-wake-row-major",
+            "mob",
+            "wake",
+            source.read_bytes(),
+        )["groups"]["wake"]
+        actual_path = self.manager.processed_file(
+            "draft-wake-row-major",
+            saved["outputs"][0]["stored_name"],
+        )
+        with Image.open(actual_path) as actual, Image.open(expected) as wanted:
+            self.assertEqual(actual.convert("RGBA").tobytes(), wanted.convert("RGBA").tobytes())
+        self.assertEqual(saved["detection_method"], "grid_auto")
+        self.assertEqual(
+            saved["processing_method"],
+            "Automatic grid: 4×2, reading left-to-right then top-to-bottom",
+        )
+
+    def test_crop_pair_accepts_small_or_large_source(self) -> None:
+        for draft_id, size in (("draft-crop-small", (32, 32)), ("draft-crop-large", (900, 500))):
+            source = Image.new("RGBA", size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(source)
+            draw.ellipse(
+                (size[0] * 0.2, size[1] * 0.1, size[0] * 0.8, size[1] * 0.9),
+                fill=(110, 75, 55, 255),
+            )
+            result = self.manager.process_upload(draft_id, "mob", "base", png_bytes(source))
+            saved = result["groups"]["base"]
+            self.assertTrue(saved["ready"])
+            self.assertEqual({(item["width"], item["height"]) for item in saved["outputs"]}, {(32, 32), (256, 256)})
+
+    def test_crop_scale_changes_subject_footprint(self) -> None:
+        source = Image.new("RGBA", (320, 240), (0, 0, 0, 0))
+        ImageDraw.Draw(source).rectangle((80, 20, 239, 219), fill=(80, 130, 170, 255))
+        draft_id = "draft-crop-scale"
+        self.manager.process_upload(draft_id, "mob", "base", png_bytes(source))
+        result = self.manager.reprocess(
+            draft_id,
+            "mob",
+            "base",
+            {"zoom": 0.4, "pan_x": 0, "pan_y": 0},
+        )
+        record = next(item for item in result["groups"]["base"]["outputs"] if item["width"] == 256)
+        path = self.manager.processed_file(draft_id, record["stored_name"])
+        with Image.open(path) as image:
+            small_box = image.convert("RGBA").getchannel("A").getbbox()
+        self.assertIsNotNone(small_box)
+        self.assertLess(small_box[2] - small_box[0], 120)
+
     def _make_complete_draft(self, draft_id: str, profile_key: str) -> None:
         metadata = self.manager.load(draft_id, profile_key)
         processed = self.manager.draft_dir(draft_id) / "processed"
+        raw = self.manager.draft_dir(draft_id) / "raw"
         processed.mkdir(parents=True, exist_ok=True)
+        raw.mkdir(parents=True, exist_ok=True)
         metadata["groups"] = {}
         profile = self.catalog.profile(profile_key)
         for group in profile["groups"]:
@@ -120,17 +259,29 @@ class SpritesheetAssistantTests(unittest.TestCase):
             for index, spec in enumerate(group["outputs"]):
                 stored_name = f"{group['id']}__{index}.png"
                 path = processed / stored_name
-                if group["mode"] == "passthrough":
+                if group["mode"] == "crop_pair":
+                    size = tuple(int(value) for value in spec["size"])
+                    image = Image.new("RGBA", size, (0, 0, 0, 0))
+                    ImageDraw.Draw(image).rectangle(
+                        (max(1, size[0] // 5), max(1, size[1] // 10), size[0] - 2, size[1] - 1),
+                        fill=(120, 80, 50, 255),
+                    )
+                elif group["mode"] == "passthrough":
                     image = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
                     ImageDraw.Draw(image).rectangle((24, 8, 103, 127), fill=(120, 80, 50, 255))
                 else:
                     image = finished_strip(int(spec["frames"]))
                 image.save(path)
                 records.append(self.manager._record_output(stored_name, path, spec))
+            raw_name = f"{group['id']}.png"
+            source = Image.new("RGBA", (640, 480), (0, 0, 0, 0))
+            ImageDraw.Draw(source).rectangle((40, 30, 599, 449), fill=(90, 120, 170, 255))
+            source.save(raw / raw_name)
             metadata["groups"][group["id"]] = {
                 "ready": True,
                 "source_width": 512,
                 "source_height": 512,
+                "raw_name": raw_name,
                 "outputs": records,
                 "warnings": [],
             }
@@ -145,9 +296,34 @@ class SpritesheetAssistantTests(unittest.TestCase):
         self.assertEqual(result["file_count"], 13)
         self.assertEqual(len(list(target.glob("*.png"))), 13)
         self.assertFalse(any(target.glob("*.import")))
+        source_target = self.base / "source_assets" / "bandit"
+        self.assertTrue(source_target.is_dir())
+        self.assertEqual(result["source_file_count"], 6)
+        self.assertEqual(
+            {path.name for path in source_target.glob("*.png")},
+            {
+                "bandit.png",
+                "bandit_walk.png",
+                "bandit_melee.png",
+                "bandit_death.png",
+                "bandit_deathfire.png",
+                "bandit_wake.png",
+            },
+        )
+        with Image.open(source_target / "bandit_walk.png") as source:
+            self.assertEqual(source.size, (640, 480))
         with self.assertRaises(app.AppError) as context:
             self.manager.export(draft_id, "mob", "BANDIT".lower(), self.root)
         self.assertEqual(context.exception.status, 409)
+
+    def test_existing_source_folder_blocks_export_without_creating_game_folder(self) -> None:
+        draft_id = "draft-source-collision"
+        self._make_complete_draft(draft_id, "mob")
+        (self.base / "source_assets" / "rat").mkdir(parents=True)
+        with self.assertRaises(app.AppError) as context:
+            self.manager.export(draft_id, "mob", "rat", self.root)
+        self.assertEqual(context.exception.status, 409)
+        self.assertFalse((self.root / "monsters" / "rat").exists())
 
     def test_library_infers_unknown_horizontal_strip(self) -> None:
         folder = self.root / "monsters" / "custom"
@@ -158,6 +334,22 @@ class SpritesheetAssistantTests(unittest.TestCase):
         asset = next(item for item in entity["assets"] if item["name"] == "custom_dance.png")
         self.assertEqual(asset["frames"], 6)
         self.assertTrue(asset["animated"])
+
+    def test_identity_and_library_descriptions_persist(self) -> None:
+        draft_id = "draft-details-001"
+        self.manager.save_identity(draft_id, "mob", "Bandit", "bandit", "Patched leather and a chipped sword.")
+        reloaded = app.DraftManager(self.base / "workspace", self.catalog).status(draft_id, "mob")
+        self.assertEqual(reloaded["identity"]["description"], "Patched leather and a chipped sword.")
+
+        folder = self.root / "monsters" / "bandit"
+        folder.mkdir()
+        state = app.AppState(self.base / "state-workspace", str(self.root))
+        state.save_library_metadata("mob", "bandit", "Bandit", "Patched leather and a chipped sword.")
+        result = state.library_scan()
+        entity = next(item for item in result["entities"] if item["name"] == "bandit")
+        self.assertEqual(entity["display_name"], "Bandit")
+        self.assertEqual(entity["description"], "Patched leather and a chipped sword.")
+        self.assertTrue((self.root / app.LIBRARY_METADATA_FILENAME).is_file())
 
     def test_slug_rejects_paths_and_windows_names(self) -> None:
         for value in ("../bandit", "Bandit", "con", "a/b"):

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import math
 import mimetypes
 import os
 import re
@@ -29,10 +30,10 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from PIL import Image, UnidentifiedImageError
 
-from normalize_anim import NormalizationError, normalize_uploaded_sheet
+from normalize_anim import NormalizationError, normalize_uploaded_sheet, resize_rgba_canvas
 
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.3"
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 CONFIG_DIR = APP_DIR / "config"
@@ -42,6 +43,8 @@ TEMPLATE_PATH = CONFIG_DIR / "prompt_templates.json"
 DEFAULT_TEMPLATE_PATH = CONFIG_DIR / "prompt_templates.defaults.json"
 NORMALIZER_CONFIG_PATH = APP_DIR / "mob_anim_batch.json"
 DEFAULT_WORKSPACE = APP_DIR / "workspace"
+SOURCE_ASSETS_DIR = APP_DIR / "source_assets"
+LIBRARY_METADATA_FILENAME = "sprite_library_metadata.json"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,80}$")
 SAFE_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -102,6 +105,20 @@ def validate_slug(value: str) -> str:
     if value.casefold() in WINDOWS_RESERVED:
         raise AppError(f"'{value}' is a reserved Windows filename.")
     return value
+
+
+def validate_identity(name: Any, description: Any, *, require_name: bool = False) -> tuple[str, str]:
+    if not isinstance(name, str) or not isinstance(description, str):
+        raise AppError("Name and description must be text.")
+    name = name.strip()
+    description = description.strip()
+    if require_name and not name:
+        raise AppError("Name cannot be empty.")
+    if len(name) > 120:
+        raise AppError("Name must be 120 characters or fewer.")
+    if len(description) > 5000:
+        raise AppError("Description must be 5,000 characters or fewer.")
+    return name, description
 
 
 def validate_draft_id(value: str) -> str:
@@ -174,6 +191,16 @@ class ProfileCatalog:
                 source_frames = group.get("source_frames")
                 if not isinstance(source_frames, int) or source_frames < 1:
                     raise AppError(f"Group '{group_id}' has an invalid source frame count.", 500)
+                grid_hint = group.get("grid_hint")
+                if grid_hint is not None and (
+                    not isinstance(grid_hint, list)
+                    or len(grid_hint) != 2
+                    or not all(isinstance(value, int) and value > 0 for value in grid_hint)
+                    or grid_hint[0] * grid_hint[1] != source_frames
+                ):
+                    raise AppError(f"Group '{group_id}' has an invalid grid hint.", 500)
+                if not isinstance(group.get("prefer_grid_reading_order", False), bool):
+                    raise AppError(f"Group '{group_id}' has an invalid grid-reading preference.", 500)
                 outputs = group.get("outputs")
                 if not isinstance(outputs, list) or not outputs:
                     raise AppError(f"Group '{group_id}' has no outputs.", 500)
@@ -190,6 +217,13 @@ class ProfileCatalog:
                         raise AppError(f"Group '{group_id}' has invalid output frames.", 500)
                     if start + frames > source_frames:
                         raise AppError(f"Group '{group_id}' output exceeds its source frame count.", 500)
+                    size = output.get("size")
+                    if group.get("mode") == "crop_pair" and (
+                        not isinstance(size, list)
+                        or len(size) != 2
+                        or not all(isinstance(value, int) and value > 0 for value in size)
+                    ):
+                        raise AppError(f"Crop output '{suffix}' needs a valid size.", 500)
 
     def public_data(self) -> dict[str, Any]:
         return self.data
@@ -252,7 +286,14 @@ def validate_finished_png(path: Path, spec: dict[str, Any], group: dict[str, Any
     with Image.open(path) as source:
         image = source.convert("RGBA")
     frames = int(spec["frames"])
-    if group["mode"] == "passthrough":
+    if group["mode"] == "crop_pair":
+        size = spec.get("size", [32, 32])
+        expected = (int(size[0]), int(size[1]))
+        if image.size != expected:
+            raise AppError(f"{path.name} is {image.width}x{image.height}; expected {expected[0]}x{expected[1]}.")
+        if image.getchannel("A").getbbox() is None:
+            raise AppError(f"{path.name} is completely transparent.")
+    elif group["mode"] == "passthrough":
         minimum = group.get("minimum_size", [1, 1])
         if image.width < int(minimum[0]) or image.height < int(minimum[1]):
             raise AppError(
@@ -271,20 +312,34 @@ def validate_finished_png(path: Path, spec: dict[str, Any], group: dict[str, Any
         if len(set(hashes)) < len(hashes):
             warnings.append(f"{path.name} contains identical frames; visually check that this is intentional.")
     if not has_useful_alpha(image):
-        raise AppError(f"{path.name} needs a genuine transparent background.")
+        if group["mode"] == "crop_pair":
+            warnings.append(f"{path.name} is fully opaque; consider using source artwork with a transparent background.")
+        else:
+            raise AppError(f"{path.name} needs a genuine transparent background.")
     return warnings
 
 
 @dataclass
 class DraftValidation:
     files: list[tuple[Path, str]]
+    source_files: list[tuple[Path, str]]
     warnings: list[str]
 
 
 class DraftManager:
-    def __init__(self, workspace: Path, catalog: ProfileCatalog):
+    def __init__(
+        self,
+        workspace: Path,
+        catalog: ProfileCatalog,
+        source_assets_root: Optional[Path] = None,
+    ):
         self.workspace = workspace.resolve()
         self.drafts_root = self.workspace / "drafts"
+        self.source_assets_root = (
+            source_assets_root.resolve()
+            if source_assets_root is not None
+            else self.workspace.parent / "source_assets"
+        )
         self.catalog = catalog
         self.normalizer_defaults = load_normalizer_defaults()
         self._lock = threading.RLock()
@@ -312,6 +367,7 @@ class DraftManager:
             "profile": profile_key,
             "created_at": int(time.time()),
             "updated_at": int(time.time()),
+            "identity": {"name": "", "slug": "", "description": ""},
             "groups": {},
         }
 
@@ -324,8 +380,21 @@ class DraftManager:
         if path.exists() and is_within(path, self.drafts_root):
             shutil.rmtree(path)
 
-    def _inspect_upload(self, data: bytes) -> tuple[int, int]:
-        if not data.startswith(PNG_SIGNATURE):
+    def save_identity(self, draft_id: str, profile_key: str, name: Any, slug: Any, description: Any) -> dict[str, Any]:
+        name, description = validate_identity(name, description)
+        if not isinstance(slug, str):
+            raise AppError("Folder name must be text.")
+        slug = slug.strip()
+        if slug:
+            slug = validate_slug(slug)
+        with self._lock:
+            metadata = self.load(draft_id, profile_key)
+            metadata["identity"] = {"name": name, "slug": slug, "description": description}
+            self.save(draft_id, metadata)
+            return self.status(draft_id, profile_key)
+
+    def _inspect_upload(self, data: bytes, *, require_png: bool = True) -> tuple[int, int]:
+        if require_png and not data.startswith(PNG_SIGNATURE):
             raise AppError("The uploaded file is not a PNG.")
         try:
             with Image.open(io.BytesIO(data)) as image:
@@ -333,14 +402,97 @@ class DraftManager:
             with Image.open(io.BytesIO(data)) as image:
                 width, height = image.size
         except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
-            raise AppError("The uploaded PNG is invalid or too large.") from exc
+            raise AppError("The uploaded image is invalid or too large.") from exc
         if width < 1 or height < 1 or width * height > 80_000_000:
-            raise AppError("The uploaded PNG has unsafe dimensions.")
+            raise AppError("The uploaded image has unsafe dimensions.")
         return width, height
 
-    def process_upload(self, draft_id: str, profile_key: str, group_id: str, data: bytes) -> dict[str, Any]:
+    @staticmethod
+    def _number(value: Any, label: str, minimum: float, maximum: float) -> float:
+        try:
+            result = float(value)
+        except (TypeError, ValueError) as exc:
+            raise AppError(f"{label} must be a number.") from exc
+        if not math.isfinite(result) or result < minimum or result > maximum:
+            raise AppError(f"{label} must be between {minimum:g} and {maximum:g}.")
+        return result
+
+    def _detection_settings(
+        self,
+        group: dict[str, Any],
+        supplied: Optional[dict[str, Any]],
+        source_width: int,
+        source_height: int,
+    ) -> dict[str, Any]:
+        supplied = supplied or {}
+        mode = str(supplied.get("mode", "auto")).strip().lower()
+        if mode not in {"auto", "blobs", "grid"}:
+            raise AppError("Detection mode must be automatic, connected sprites or fixed grid.")
+        hint = group.get("grid_hint")
+        if isinstance(hint, list) and len(hint) == 2:
+            default_cols, default_rows = int(hint[0]), int(hint[1])
+        else:
+            frame_count = int(group["source_frames"])
+            candidates = [(cols, frame_count // cols) for cols in range(1, frame_count + 1) if frame_count % cols == 0]
+            target_ratio = source_width / max(1, source_height)
+            default_cols, default_rows = min(candidates, key=lambda pair: abs((pair[0] / pair[1]) - target_ratio))
+
+        def integer(key: str, default: int, minimum: int, maximum: int, label: str) -> int:
+            try:
+                value = int(supplied.get(key, default))
+            except (TypeError, ValueError) as exc:
+                raise AppError(f"{label} must be a whole number.") from exc
+            if value < minimum or value > maximum:
+                raise AppError(f"{label} must be between {minimum} and {maximum}.")
+            return value
+
+        columns = integer("columns", default_cols, 1, 32, "Grid columns")
+        rows = integer("rows", default_rows, 1, 32, "Grid rows")
+        if columns * rows != int(group["source_frames"]):
+            raise AppError(
+                f"The grid must contain exactly {group['source_frames']} cells; {columns}×{rows} contains {columns * rows}."
+            )
+        return {
+            "mode": mode,
+            "columns": columns,
+            "rows": rows,
+            "alpha_threshold": integer(
+                "alpha_threshold", int(self.normalizer_defaults.get("alpha_threshold", 0)), 0, 254, "Alpha threshold"
+            ),
+            "min_blob_area": integer(
+                "min_blob_area", int(self.normalizer_defaults.get("min_blob_area", 64)), 1, 100_000, "Minimum component area"
+            ),
+            "row_tolerance": integer(
+                "row_tolerance", int(self.normalizer_defaults.get("row_tolerance", 12)), 0, 500, "Row tolerance"
+            ),
+        }
+
+    def _crop_settings(self, supplied: Optional[dict[str, Any]]) -> dict[str, float]:
+        supplied = supplied or {}
+        return {
+            "zoom": self._number(supplied.get("zoom", 1.0), "Scale", 0.1, 6.0),
+            "pan_x": self._number(supplied.get("pan_x", 0.0), "Horizontal position", -2.0, 2.0),
+            "pan_y": self._number(supplied.get("pan_y", 0.0), "Vertical position", -2.0, 2.0),
+        }
+
+    @staticmethod
+    def _clear_previous_outputs(saved: dict[str, Any], output_dir: Path) -> None:
+        for old_output in saved.get("outputs", []):
+            candidate = output_dir / str(old_output.get("stored_name", ""))
+            if candidate.is_file() and is_within(candidate, output_dir):
+                candidate.unlink()
+
+    def process_upload(
+        self,
+        draft_id: str,
+        profile_key: str,
+        group_id: str,
+        data: bytes,
+        processing: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         group = self.catalog.group(profile_key, group_id)
-        source_width, source_height = self._inspect_upload(data)
+        crop_mode = group["mode"] == "crop_pair"
+        source_width, source_height = self._inspect_upload(data, require_png=not crop_mode)
         with self._lock:
             metadata = self.load(draft_id, profile_key)
             draft_dir = self.draft_dir(draft_id)
@@ -349,90 +501,347 @@ class DraftManager:
             raw_dir.mkdir(parents=True, exist_ok=True)
             output_dir.mkdir(parents=True, exist_ok=True)
             raw_path = raw_dir / f"{group_id}.png"
-            atomic_write_bytes(raw_path, data)
+            if crop_mode:
+                with Image.open(io.BytesIO(data)) as source:
+                    converted = source.convert("RGBA")
+                    source_bbox = converted.getchannel("A").getbbox()
+                    stream = io.BytesIO()
+                    converted.save(stream, format="PNG", optimize=True)
+                atomic_write_bytes(raw_path, stream.getvalue())
+            else:
+                atomic_write_bytes(raw_path, data)
 
-            old_group = metadata.get("groups", {}).get(group_id, {})
-            for old_output in old_group.get("outputs", []):
-                candidate = output_dir / str(old_output.get("stored_name", ""))
-                if candidate.is_file() and is_within(candidate, output_dir):
-                    candidate.unlink()
-
-            output_records: list[dict[str, Any]] = []
-            warnings: list[str] = []
-            temporary_strip = output_dir / f".{group_id}.{uuid.uuid4().hex}.strip.png"
-            try:
-                if group["mode"] == "passthrough":
-                    with Image.open(raw_path) as source:
-                        image = source.convert("RGBA")
-                    for index, spec in enumerate(group["outputs"]):
-                        stored_name = f"{group_id}__{index}.png"
-                        output_path = output_dir / stored_name
-                        image.save(output_path, optimize=True)
-                        warnings.extend(validate_finished_png(output_path, spec, group))
-                        output_records.append(self._record_output(stored_name, output_path, spec))
-                else:
-                    normalize_uploaded_sheet(
-                        raw_path,
-                        temporary_strip,
-                        frames=int(group["source_frames"]),
-                        cell=32,
-                        config_overrides=self.normalizer_defaults,
-                    )
-                    with Image.open(temporary_strip) as source:
-                        strip = source.convert("RGBA")
-                    expected_size = (int(group["source_frames"]) * 32, 32)
-                    if strip.size != expected_size:
-                        raise AppError(
-                            f"Normalizer produced {strip.width}x{strip.height}; expected {expected_size[0]}x{expected_size[1]}."
-                        )
-                    for index, spec in enumerate(group["outputs"]):
-                        start = int(spec["start"])
-                        frames = int(spec["frames"])
-                        output = strip.crop((start * 32, 0, (start + frames) * 32, 32))
-                        if bool(spec.get("reverse", False)):
-                            output = reverse_strip_frames(output, frames)
-                        stored_name = f"{group_id}__{index}.png"
-                        output_path = output_dir / stored_name
-                        output.save(output_path, optimize=True)
-                        warnings.extend(validate_finished_png(output_path, spec, group))
-                        output_records.append(self._record_output(stored_name, output_path, spec))
-            except NormalizationError as exc:
-                metadata.setdefault("groups", {})[group_id] = {
-                    "ready": False,
-                    "source_width": source_width,
-                    "source_height": source_height,
-                    "error": str(exc),
-                }
-                self.save(draft_id, metadata)
-                raise AppError(f"Could not process {group['label']}: {exc}") from exc
-            except Exception as exc:
-                if isinstance(exc, AppError):
-                    message = str(exc)
-                else:
-                    message = f"Unexpected processing error: {exc}"
-                metadata.setdefault("groups", {})[group_id] = {
-                    "ready": False,
-                    "source_width": source_width,
-                    "source_height": source_height,
-                    "error": message,
-                }
-                self.save(draft_id, metadata)
-                if isinstance(exc, AppError):
-                    raise
-                raise AppError(message, 500) from exc
-            finally:
-                temporary_strip.unlink(missing_ok=True)
-
-            metadata.setdefault("groups", {})[group_id] = {
-                "ready": True,
+            old_group = metadata.setdefault("groups", {}).get(group_id, {})
+            self._clear_previous_outputs(old_group, output_dir)
+            saved: dict[str, Any] = {
+                "ready": False,
                 "source_width": source_width,
                 "source_height": source_height,
                 "raw_name": raw_path.name,
-                "outputs": output_records,
-                "warnings": warnings,
+                "raw_version": uuid.uuid4().hex,
+                "outputs": [],
+                "warnings": [],
             }
+            if crop_mode:
+                saved["crop"] = self._crop_settings(processing)
+                saved["crop_bbox"] = list(source_bbox) if source_bbox is not None else [0, 0, source_width, source_height]
+            else:
+                saved["settings"] = self._detection_settings(group, processing, source_width, source_height)
+            metadata["groups"][group_id] = saved
+            self.save(draft_id, metadata)
+            return self._process_existing(draft_id, profile_key, group_id)
+
+    def reprocess(
+        self,
+        draft_id: str,
+        profile_key: str,
+        group_id: str,
+        processing: Optional[dict[str, Any]],
+    ) -> dict[str, Any]:
+        group = self.catalog.group(profile_key, group_id)
+        with self._lock:
+            metadata = self.load(draft_id, profile_key)
+            saved = metadata.get("groups", {}).get(group_id)
+            if not saved or not saved.get("raw_name"):
+                raise AppError("Upload an image for this group before reprocessing it.")
+            if group["mode"] == "crop_pair":
+                saved["crop"] = self._crop_settings(processing)
+            else:
+                saved["settings"] = self._detection_settings(
+                    group, processing, int(saved.get("source_width", 1)), int(saved.get("source_height", 1))
+                )
+            self.save(draft_id, metadata)
+            return self._process_existing(draft_id, profile_key, group_id)
+
+    def _render_crop_pair(
+        self,
+        raw_path: Path,
+        output_dir: Path,
+        group_id: str,
+        group: dict[str, Any],
+        crop: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], list[str], list[int]]:
+        with Image.open(raw_path) as source_file:
+            source = source_file.convert("RGBA")
+        bbox = source.getchannel("A").getbbox()
+        if bbox is None:
+            raise AppError("The source image is completely transparent.")
+        subject = source.crop(bbox)
+        large_spec = max(group["outputs"], key=lambda item: int(item["size"][0]) * int(item["size"][1]))
+        large_size = (int(large_spec["size"][0]), int(large_spec["size"][1]))
+        zoom = float(crop["zoom"])
+        scale = 0.9 * min(large_size[0] / subject.width, large_size[1] / subject.height) * zoom
+        scaled_size = (max(1, round(subject.width * scale)), max(1, round(subject.height * scale)))
+        scaled = resize_rgba_canvas(subject, scaled_size)
+        canvas = Image.new("RGBA", large_size, (0, 0, 0, 0))
+        x = round((large_size[0] - scaled.width) / 2 + float(crop["pan_x"]) * large_size[0] / 2)
+        y = round((large_size[1] - scaled.height) / 2 + float(crop["pan_y"]) * large_size[1] / 2)
+        canvas.alpha_composite(scaled, dest=(x, y))
+
+        records: list[dict[str, Any]] = []
+        warnings: list[str] = []
+        for index, spec in enumerate(group["outputs"]):
+            size = (int(spec["size"][0]), int(spec["size"][1]))
+            image = canvas.copy() if size == large_size else resize_rgba_canvas(canvas, size, pixel_art=True)
+            stored_name = f"{group_id}__{index}.png"
+            output_path = output_dir / stored_name
+            image.save(output_path, optimize=True)
+            warnings.extend(validate_finished_png(output_path, spec, group))
+            records.append(self._record_output(stored_name, output_path, spec))
+        return records, warnings, list(bbox)
+
+    @staticmethod
+    def _strip_has_all_frames(path: Path, frame_count: int, cell: int = 32) -> bool:
+        if not path.is_file():
+            return False
+        with Image.open(path) as source:
+            alpha = source.convert("RGBA").getchannel("A")
+        if alpha.size != (frame_count * cell, cell):
+            return False
+        return all(
+            alpha.crop((index * cell, 0, (index + 1) * cell, cell)).getbbox() is not None
+            for index in range(frame_count)
+        )
+
+    @staticmethod
+    def _rank_grid_candidates(
+        raw_path: Path,
+        frame_count: int,
+        alpha_threshold: int,
+        preferred: tuple[int, int],
+    ) -> list[tuple[int, int]]:
+        """Rank factor-pair grids without changing fixed-grid behaviour.
+
+        Automatic fallback should cope with both 4x2 and 8x1 eight-frame
+        sheets.  A good grid has artwork in every cell, cuts through little or
+        no artwork at its internal boundaries, and produces reasonably shaped
+        cells.  The configured profile hint is retained as a small tie-breaker.
+        """
+
+        with Image.open(raw_path) as source:
+            alpha = source.convert("RGBA").getchannel("A")
+        maximum_dimension = 1024
+        if max(alpha.size) > maximum_dimension:
+            scale = maximum_dimension / max(alpha.size)
+            alpha = alpha.resize(
+                (max(1, round(alpha.width * scale)), max(1, round(alpha.height * scale))),
+                Image.Resampling.NEAREST,
+            )
+        if alpha_threshold > 0:
+            alpha = alpha.point(lambda value: 255 if value > alpha_threshold else 0)
+
+        candidates: list[tuple[float, int, int]] = []
+        for columns in range(1, frame_count + 1):
+            if frame_count % columns:
+                continue
+            rows = frame_count // columns
+            cell_width = alpha.width / columns
+            cell_height = alpha.height / rows
+            empty_cells = 0
+            for row in range(rows):
+                for column in range(columns):
+                    box = (
+                        round(column * alpha.width / columns),
+                        round(row * alpha.height / rows),
+                        round((column + 1) * alpha.width / columns),
+                        round((row + 1) * alpha.height / rows),
+                    )
+                    if alpha.crop(box).getbbox() is None:
+                        empty_cells += 1
+
+            boundary_opaque = 0
+            boundary_area = 0
+            band = max(1, round(min(cell_width, cell_height) * 0.01))
+            for column in range(1, columns):
+                x = round(column * alpha.width / columns)
+                strip = alpha.crop((max(0, x - band), 0, min(alpha.width, x + band + 1), alpha.height))
+                histogram = strip.histogram()
+                boundary_opaque += sum(histogram[1:])
+                boundary_area += strip.width * strip.height
+            for row in range(1, rows):
+                y = round(row * alpha.height / rows)
+                strip = alpha.crop((0, max(0, y - band), alpha.width, min(alpha.height, y + band + 1)))
+                histogram = strip.histogram()
+                boundary_opaque += sum(histogram[1:])
+                boundary_area += strip.width * strip.height
+
+            cut_ratio = boundary_opaque / max(1, boundary_area)
+            cell_aspect = max(1e-6, cell_width / max(1e-6, cell_height))
+            shape_penalty = abs(math.log(cell_aspect))
+            preference_penalty = 0.0 if (columns, rows) == preferred else 0.05
+            score = empty_cells * 1000.0 + cut_ratio * 25.0 + shape_penalty + preference_penalty
+            candidates.append((score, columns, rows))
+        candidates.sort()
+        return [(columns, rows) for _score, columns, rows in candidates]
+
+    def _run_normalizer(
+        self,
+        raw_path: Path,
+        temporary_strip: Path,
+        group: dict[str, Any],
+        settings: dict[str, Any],
+    ) -> tuple[str, str]:
+        common = {
+            **self.normalizer_defaults,
+            "alpha_threshold": settings["alpha_threshold"],
+            "min_blob_area": settings["min_blob_area"],
+            "row_tolerance": settings["row_tolerance"],
+        }
+
+        def run_grid() -> None:
+            normalize_uploaded_sheet(
+                raw_path,
+                temporary_strip,
+                frames=int(group["source_frames"]),
+                cell=32,
+                config_overrides={
+                    **common,
+                    "source_cols": settings["columns"],
+                    "source_rows": settings["rows"],
+                },
+            )
+
+        def run_ranked_grids() -> tuple[Optional[tuple[str, str]], list[str]]:
+            preferred = (int(settings["columns"]), int(settings["rows"]))
+            candidates = self._rank_grid_candidates(
+                raw_path,
+                int(group["source_frames"]),
+                int(settings["alpha_threshold"]),
+                preferred,
+            )
+            grid_errors: list[str] = []
+            for columns, rows in candidates:
+                temporary_strip.unlink(missing_ok=True)
+                settings["columns"] = columns
+                settings["rows"] = rows
+                try:
+                    run_grid()
+                except NormalizationError as grid_error:
+                    grid_errors.append(f"{columns}×{rows}: {grid_error}")
+                    continue
+                if self._strip_has_all_frames(temporary_strip, int(group["source_frames"])):
+                    return ("grid_auto", f"{columns}×{rows}"), grid_errors
+                grid_errors.append(f"{columns}×{rows}: one or more empty cells")
+            return None, grid_errors
+
+        if settings["mode"] == "grid":
+            run_grid()
+            return "grid", f"Fixed {settings['columns']}×{settings['rows']} grid"
+
+        grid_result: Optional[tuple[str, str]] = None
+        grid_errors: list[str] = []
+        if settings["mode"] == "auto" and bool(group.get("prefer_grid_reading_order", False)):
+            grid_result, grid_errors = run_ranked_grids()
+            if grid_result is not None:
+                method, layout = grid_result
+                return method, f"Automatic grid: {layout}, reading left-to-right then top-to-bottom"
+        try:
+            normalize_uploaded_sheet(
+                raw_path,
+                temporary_strip,
+                frames=int(group["source_frames"]),
+                cell=32,
+                config_overrides={**common, "source_cols": None, "source_rows": None},
+            )
+            return "blobs", "Connected sprite detection"
+        except NormalizationError as blob_error:
+            if settings["mode"] != "auto":
+                raise
+            if not grid_errors:
+                grid_result, grid_errors = run_ranked_grids()
+            if grid_result is not None:
+                method, layout = grid_result
+                return method, f"Automatic fallback: {layout} grid"
+            detail = "; ".join(grid_errors[:4])
+            raise NormalizationError(
+                f"Connected-sprite detection failed ({blob_error}) and no automatic grid layout produced "
+                f"{group['source_frames']} complete frames. Tried {detail}."
+            )
+
+    def _process_existing(self, draft_id: str, profile_key: str, group_id: str) -> dict[str, Any]:
+        group = self.catalog.group(profile_key, group_id)
+        metadata = self.load(draft_id, profile_key)
+        saved = metadata.get("groups", {}).get(group_id)
+        if not saved or not saved.get("raw_name"):
+            raise AppError("The original upload is missing.")
+        raw_root = self.draft_dir(draft_id) / "raw"
+        raw_path = (raw_root / str(saved["raw_name"])).resolve()
+        if not is_within(raw_path, raw_root) or not raw_path.is_file():
+            raise AppError("The original upload is missing.")
+        output_dir = self.draft_dir(draft_id) / "processed"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_previous_outputs(saved, output_dir)
+        saved["outputs"] = []
+        saved["warnings"] = []
+        saved.pop("error", None)
+        saved.pop("processing_method", None)
+        saved.pop("detection_method", None)
+        temporary_strip = output_dir / f".{group_id}.{uuid.uuid4().hex}.strip.png"
+        try:
+            if group["mode"] == "crop_pair":
+                records, warnings, bbox = self._render_crop_pair(
+                    raw_path, output_dir, group_id, group, saved.get("crop", self._crop_settings(None))
+                )
+                saved["crop_bbox"] = bbox
+                saved["processing_method"] = "Interactive crop"
+            elif group["mode"] == "passthrough":
+                records = []
+                warnings = []
+                with Image.open(raw_path) as source:
+                    image = source.convert("RGBA")
+                for index, spec in enumerate(group["outputs"]):
+                    stored_name = f"{group_id}__{index}.png"
+                    output_path = output_dir / stored_name
+                    image.save(output_path, optimize=True)
+                    warnings.extend(validate_finished_png(output_path, spec, group))
+                    records.append(self._record_output(stored_name, output_path, spec))
+            else:
+                method, method_label = self._run_normalizer(
+                    raw_path, temporary_strip, group, saved.get("settings", self._detection_settings(group, None, 1, 1))
+                )
+                saved["detection_method"] = method
+                saved["processing_method"] = method_label
+                with Image.open(temporary_strip) as source:
+                    strip = source.convert("RGBA")
+                expected_size = (int(group["source_frames"]) * 32, 32)
+                if strip.size != expected_size:
+                    raise AppError(
+                        f"Normalizer produced {strip.width}x{strip.height}; expected {expected_size[0]}x{expected_size[1]}."
+                    )
+                records = []
+                warnings = []
+                for index, spec in enumerate(group["outputs"]):
+                    start = int(spec["start"])
+                    frames = int(spec["frames"])
+                    output = strip.crop((start * 32, 0, (start + frames) * 32, 32))
+                    if bool(spec.get("reverse", False)):
+                        output = reverse_strip_frames(output, frames)
+                    stored_name = f"{group_id}__{index}.png"
+                    output_path = output_dir / stored_name
+                    output.save(output_path, optimize=True)
+                    warnings.extend(validate_finished_png(output_path, spec, group))
+                    records.append(self._record_output(stored_name, output_path, spec))
+            saved["ready"] = True
+            saved["outputs"] = records
+            saved["warnings"] = sorted(set(warnings))
             self.save(draft_id, metadata)
             return self.status(draft_id, profile_key)
+        except Exception as exc:
+            message = str(exc) if isinstance(exc, (AppError, NormalizationError)) else f"Unexpected processing error: {exc}"
+            message = message.replace(" Use --allow-missing to continue anyway.", "")
+            if isinstance(exc, NormalizationError):
+                message += " Open Sprite detection controls to adjust the grid or component settings, then reprocess."
+            saved["ready"] = False
+            saved["error"] = message
+            saved["outputs"] = []
+            self.save(draft_id, metadata)
+            if isinstance(exc, AppError):
+                raise
+            if isinstance(exc, NormalizationError):
+                raise AppError(f"Could not process {group['label']}: {message}") from exc
+            raise AppError(message, 500) from exc
+        finally:
+            temporary_strip.unlink(missing_ok=True)
 
     @staticmethod
     def _record_output(stored_name: str, path: Path, spec: dict[str, Any]) -> dict[str, Any]:
@@ -454,6 +863,7 @@ class DraftManager:
         return {
             "draft_id": draft_id,
             "profile": profile_key,
+            "identity": metadata.get("identity", {"name": "", "slug": "", "description": ""}),
             "groups": groups,
             "missing_groups": missing,
             "ready": not missing,
@@ -469,10 +879,24 @@ class DraftManager:
             raise AppError("Draft image not found.", 404)
         return path
 
+    def raw_file(self, draft_id: str, profile_key: str, group_id: str) -> Path:
+        group = self.catalog.group(profile_key, group_id)
+        metadata = self.load(draft_id, profile_key)
+        saved = metadata.get("groups", {}).get(group["id"], {})
+        stored_name = str(saved.get("raw_name", ""))
+        if stored_name != f"{group_id}.png":
+            raise AppError("Original upload not found.", 404)
+        root = self.draft_dir(draft_id) / "raw"
+        path = (root / stored_name).resolve()
+        if not is_within(path, root) or not path.is_file():
+            raise AppError("Original upload not found.", 404)
+        return path
+
     def validate_for_export(self, draft_id: str, profile_key: str) -> DraftValidation:
         metadata = self.load(draft_id, profile_key)
         profile = self.catalog.profile(profile_key)
         files: list[tuple[Path, str]] = []
+        source_files: list[tuple[Path, str]] = []
         warnings: list[str] = []
         missing: list[str] = []
         groups = metadata.get("groups", {})
@@ -485,6 +909,11 @@ class DraftManager:
             if len(records) != len(group["outputs"]):
                 missing.append(group["label"])
                 continue
+            try:
+                source_files.append((self.raw_file(draft_id, profile_key, str(group["id"])), str(group["id"])))
+            except AppError:
+                missing.append(f"{group['label']} (original full-size upload)")
+                continue
             for spec, record in zip(group["outputs"], records):
                 path = self.processed_file(draft_id, str(record["stored_name"]))
                 if record.get("suffix") != spec["suffix"]:
@@ -496,7 +925,23 @@ class DraftManager:
         expected_count = sum(len(group["outputs"]) for group in profile["groups"])
         if len(files) != expected_count:
             raise AppError(f"Draft contains {len(files)} final images; expected {expected_count}.")
-        return DraftValidation(files=files, warnings=sorted(set(warnings)))
+        if len(source_files) != len(profile["groups"]):
+            raise AppError(
+                f"Draft contains {len(source_files)} original full-size uploads; expected {len(profile['groups'])}."
+            )
+        return DraftValidation(files=files, source_files=source_files, warnings=sorted(set(warnings)))
+
+    @staticmethod
+    def _source_asset_name(slug: str, group_id: str) -> str:
+        return f"{slug}.png" if group_id == "base" else f"{slug}_{group_id}.png"
+
+    @staticmethod
+    def _reject_casefold_collision(parent: Path, slug: str, label: str) -> None:
+        if not parent.exists():
+            return
+        for child in parent.iterdir():
+            if child.name.casefold() == slug.casefold():
+                raise AppError(f"The {label} folder '{child.name}' already exists. Nothing was exported.", 409)
 
     def export(self, draft_id: str, profile_key: str, slug: str, sprites_root: Path) -> dict[str, Any]:
         slug = validate_slug(slug)
@@ -505,38 +950,64 @@ class DraftManager:
         parent = (sprites_root / str(profile["folder"])).resolve()
         if not parent.is_dir() or not is_within(parent, sprites_root):
             raise AppError(f"Export folder does not exist: {parent}")
-        for child in parent.iterdir():
-            if child.name.casefold() == slug.casefold():
-                raise AppError(f"The folder '{child.name}' already exists. Nothing was exported.", 409)
+        self._reject_casefold_collision(parent, slug, "game asset")
+
+        source_parent = self.source_assets_root
+        source_parent.mkdir(parents=True, exist_ok=True)
+        self._reject_casefold_collision(source_parent, slug, "full-size source asset")
 
         target = parent / slug
+        source_target = source_parent / slug
         staging = parent / f".spritesheet-assistant-{slug}-{uuid.uuid4().hex}"
+        source_staging = source_parent / f".spritesheet-assistant-{slug}-{uuid.uuid4().hex}"
+        game_published = False
+        sources_published = False
         try:
             staging.mkdir()
+            source_staging.mkdir()
             for source, suffix in validation.files:
                 destination = staging / f"{slug}{suffix}"
                 shutil.copy2(source, destination)
+            for source, group_id in validation.source_files:
+                destination = source_staging / self._source_asset_name(slug, group_id)
+                shutil.copy2(source, destination)
             # Re-open every staged image before making the new folder visible.
-            for staged in staging.glob("*.png"):
+            for staged in [*staging.glob("*.png"), *source_staging.glob("*.png")]:
                 with Image.open(staged) as image:
                     image.verify()
-            if target.exists():
+            if target.exists() or source_target.exists():
                 raise AppError(f"The folder '{slug}' appeared during export. Nothing was overwritten.", 409)
+            source_staging.rename(source_target)
+            sources_published = True
             staging.rename(target)
+            game_published = True
         except Exception:
             if staging.exists():
                 shutil.rmtree(staging, ignore_errors=True)
+            if source_staging.exists():
+                shutil.rmtree(source_staging, ignore_errors=True)
+            if game_published and target.exists():
+                shutil.rmtree(target, ignore_errors=True)
+            if sources_published and source_target.exists():
+                shutil.rmtree(source_target, ignore_errors=True)
             raise
 
         try:
             relative = target.relative_to(sprites_root).as_posix()
         except ValueError:
             relative = str(target)
+        try:
+            source_relative = source_target.relative_to(APP_DIR).as_posix()
+        except ValueError:
+            source_relative = str(source_target)
         return {
             "ok": True,
             "path": str(target),
             "relative_path": relative,
             "file_count": len(validation.files),
+            "source_path": str(source_target),
+            "source_relative_path": source_relative,
+            "source_file_count": len(validation.source_files),
             "warnings": validation.warnings,
             "note": "Godot will generate .import files automatically.",
         }
@@ -556,11 +1027,33 @@ def infer_asset_spec(file_name: str, folder_name: str, specs: list[dict[str, Any
     return {"frames": 1, "frame_ms": 180, "mode": "unknown", "suffix": ""}
 
 
-def scan_sprite_library(root: Path, catalog: ProfileCatalog) -> dict[str, Any]:
+def load_library_metadata(root: Path) -> dict[str, Any]:
+    path = root / LIBRARY_METADATA_FILENAME
+    if not path.exists():
+        return {"version": 1, "entities": {}}
+    data = read_json(path)
+    entities = data.get("entities")
+    if not isinstance(entities, dict):
+        raise AppError(f"{LIBRARY_METADATA_FILENAME} must contain an entities object.")
+    return {"version": 1, "entities": entities}
+
+
+def scan_sprite_library(
+    root: Path,
+    catalog: ProfileCatalog,
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     if not root.is_dir():
         return {"root": str(root), "available": False, "entities": [], "errors": ["Sprites root was not found."]}
     entities: list[dict[str, Any]] = []
     errors: list[str] = []
+    if metadata is None:
+        try:
+            metadata = load_library_metadata(root)
+        except AppError as exc:
+            metadata = {"version": 1, "entities": {}}
+            errors.append(str(exc))
+    metadata_entities = metadata.get("entities", {}) if isinstance(metadata, dict) else {}
     for profile_key, profile in catalog.profiles.items():
         profile_root = root / str(profile["folder"])
         if not profile_root.is_dir():
@@ -604,10 +1097,24 @@ def scan_sprite_library(root: Path, catalog: ProfileCatalog) -> dict[str, Any]:
                     })
                 except AppError as exc:
                     assets.append({"name": path.name, "error": str(exc), "relative_path": path.relative_to(root).as_posix()})
+            metadata_key = f"{profile_key}/{entity_dir.name}"
+            saved_details = metadata_entities.get(metadata_key, {}) if isinstance(metadata_entities, dict) else {}
+            if not isinstance(saved_details, dict):
+                saved_details = {}
+            saved_name = saved_details.get("name", "")
+            saved_description = saved_details.get("description", "")
+            if not isinstance(saved_name, str):
+                saved_name = ""
+            if not isinstance(saved_description, str):
+                saved_description = ""
             entities.append({
                 "profile": profile_key,
                 "profile_label": profile["label"],
                 "name": entity_dir.name,
+                "folder": entity_dir.name,
+                "display_name": saved_name or entity_dir.name,
+                "description": saved_description,
+                "metadata_present": bool(saved_name or saved_description),
                 "relative_path": entity_dir.relative_to(root).as_posix(),
                 "assets": assets,
                 "asset_count": len(assets),
@@ -622,7 +1129,7 @@ class AppState:
         configured = cli_sprites_root if cli_sprites_root is not None else str(self.app_config.get("sprites_root", ""))
         self.sprites_root, self.root_available, self.root_source = discover_sprites_root(configured)
         self.catalog = ProfileCatalog(PROFILE_PATH)
-        self.drafts = DraftManager(workspace, self.catalog)
+        self.drafts = DraftManager(workspace, self.catalog, SOURCE_ASSETS_DIR)
 
     def templates(self) -> dict[str, Any]:
         return read_json(TEMPLATE_PATH)
@@ -674,6 +1181,43 @@ class AppState:
             "available": self.root_available and self.sprites_root.is_dir(),
             "source": self.root_source,
         }
+
+    def library_scan(self) -> dict[str, Any]:
+        with self.lock:
+            try:
+                metadata = load_library_metadata(self.sprites_root)
+            except AppError:
+                metadata = None
+            return scan_sprite_library(self.sprites_root, self.catalog, metadata)
+
+    def save_library_metadata(
+        self,
+        profile_key: str,
+        folder: str,
+        name: Any,
+        description: Any,
+    ) -> dict[str, Any]:
+        profile = self.catalog.profile(profile_key)
+        if not isinstance(folder, str) or not folder or Path(folder).name != folder or "/" in folder or "\\" in folder:
+            raise AppError("Invalid sprite folder name.")
+        name, description = validate_identity(name, description)
+        profile_root = (self.sprites_root / str(profile["folder"])).resolve()
+        entity_dir = (profile_root / folder).resolve()
+        if not is_within(entity_dir, profile_root) or not entity_dir.is_dir():
+            raise AppError("That sprite folder no longer exists.", 404)
+        with self.lock:
+            metadata = load_library_metadata(self.sprites_root)
+            key = f"{profile_key}/{folder}"
+            record = {
+                "profile": profile_key,
+                "folder": folder,
+                "name": name,
+                "description": description,
+                "updated_at": int(time.time()),
+            }
+            metadata.setdefault("entities", {})[key] = record
+            atomic_write_json(self.sprites_root / LIBRARY_METADATA_FILENAME, metadata)
+            return record
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -761,6 +1305,15 @@ class RequestHandler(BaseHTTPRequestHandler):
             raise AppError("JSON request must be an object.")
         return parsed
 
+    def _processing_query(self) -> dict[str, Any]:
+        query = self._query()
+        result: dict[str, Any] = {}
+        for key in ("mode", "columns", "rows", "alpha_threshold", "min_blob_area", "row_tolerance"):
+            values = query.get(key)
+            if values and values[0] != "":
+                result[key] = values[0]
+        return result
+
     def _handle_error(self, exc: Exception) -> None:
         if isinstance(exc, AppError):
             self._send_json({"ok": False, "error": str(exc), "details": exc.details}, exc.status)
@@ -792,9 +1345,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                     "root": state.root_info(),
                     "profiles": state.catalog.public_data(),
                     "templates": state.templates(),
+                    "detection_defaults": {
+                        "mode": "auto",
+                        "alpha_threshold": int(state.drafts.normalizer_defaults.get("alpha_threshold", 0)),
+                        "min_blob_area": int(state.drafts.normalizer_defaults.get("min_blob_area", 64)),
+                        "row_tolerance": int(state.drafts.normalizer_defaults.get("row_tolerance", 12)),
+                    },
                 })
             elif path == "/api/library":
-                self._send_json({"ok": True, **scan_sprite_library(state.sprites_root, state.catalog)})
+                self._send_json({"ok": True, **state.library_scan()})
             elif path == "/api/draft":
                 self._send_json({"ok": True, **state.drafts.status(self._one("draft"), self._one("profile"))})
             elif path == "/media":
@@ -805,6 +1364,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._send_file(candidate, "image/png", cache=True)
             elif path == "/draft-media":
                 candidate = state.drafts.processed_file(self._one("draft"), self._one("file"))
+                self._send_file(candidate, "image/png")
+            elif path == "/draft-raw":
+                candidate = state.drafts.raw_file(self._one("draft"), self._one("profile"), self._one("group"))
                 self._send_file(candidate, "image/png")
             else:
                 raise AppError("Route not found.", 404)
@@ -818,15 +1380,47 @@ class RequestHandler(BaseHTTPRequestHandler):
             state = self.server.state
             if path == "/api/upload":
                 result = state.drafts.process_upload(
-                    self._one("draft"), self._one("profile"), self._one("group"), self._read_body()
+                    self._one("draft"), self._one("profile"), self._one("group"), self._read_body(), self._processing_query()
+                )
+                self._send_json({"ok": True, **result})
+            elif path == "/api/reprocess":
+                body = self._read_json_body()
+                result = state.drafts.reprocess(
+                    str(body.get("draft", "")),
+                    str(body.get("profile", "")),
+                    str(body.get("group", "")),
+                    body.get("processing") if isinstance(body.get("processing"), dict) else {},
+                )
+                self._send_json({"ok": True, **result})
+            elif path == "/api/draft/identity":
+                body = self._read_json_body()
+                result = state.drafts.save_identity(
+                    str(body.get("draft", "")),
+                    str(body.get("profile", "")),
+                    body.get("name", ""),
+                    body.get("slug", ""),
+                    body.get("description", ""),
                 )
                 self._send_json({"ok": True, **result})
             elif path == "/api/export":
                 body = self._read_json_body()
+                profile_key = str(body.get("profile", ""))
+                slug = str(body.get("slug", ""))
+                name, description = validate_identity(body.get("name", ""), body.get("description", ""), require_name=True)
                 result = state.drafts.export(
-                    str(body.get("draft", "")), str(body.get("profile", "")), str(body.get("slug", "")), state.sprites_root
+                    str(body.get("draft", "")), profile_key, slug, state.sprites_root
                 )
+                result["metadata"] = state.save_library_metadata(profile_key, validate_slug(slug), name, description)
                 self._send_json(result)
+            elif path == "/api/library/metadata":
+                body = self._read_json_body()
+                record = state.save_library_metadata(
+                    str(body.get("profile", "")),
+                    str(body.get("folder", "")),
+                    body.get("name", ""),
+                    body.get("description", ""),
+                )
+                self._send_json({"ok": True, "metadata": record})
             elif path == "/api/templates":
                 self._send_json({"ok": True, "templates": state.save_templates(self._read_json_body())})
             elif path == "/api/templates/reset":
