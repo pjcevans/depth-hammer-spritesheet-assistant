@@ -246,6 +246,99 @@ class SpritesheetAssistantTests(unittest.TestCase):
         self.assertIsNotNone(small_box)
         self.assertLess(small_box[2] - small_box[0], 120)
 
+    def test_quality_controls_change_only_32_pixel_output_and_persist(self) -> None:
+        source = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(source)
+        draw.ellipse((40, 18, 470, 500), fill=(74, 116, 174, 255))
+        for offset in range(48, 470, 17):
+            draw.line((offset, 35, 510 - offset // 3, 485), fill=(225, 184, 82, 255), width=5)
+
+        draft_id = "draft-quality-still"
+        first = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "base",
+            png_bytes(source),
+            {
+                "downscale_filter": "nearest",
+                "preblur": 0,
+                "sharpen": 1,
+                "quantize": False,
+                "colour_count": 48,
+                "alpha_aware": False,
+                "gamma_correct": False,
+                "alpha_cleanup": False,
+                "hard_alpha": False,
+                "despeckle": False,
+            },
+        )["groups"]["base"]
+        first_small = next(item for item in first["outputs"] if item["width"] == 32)
+        first_large = next(item for item in first["outputs"] if item["width"] == 256)
+        first_small_bytes = self.manager.processed_file(draft_id, first_small["stored_name"]).read_bytes()
+        first_large_bytes = self.manager.processed_file(draft_id, first_large["stored_name"]).read_bytes()
+
+        second = self.manager.reprocess(
+            draft_id,
+            "mob",
+            "base",
+            {
+                "downscale_filter": "lanczos",
+                "preblur": 0.35,
+                "sharpen": 2.5,
+                "quantize": True,
+                "colour_count": 24,
+                "alpha_aware": True,
+                "gamma_correct": True,
+                "alpha_cleanup": True,
+                "hard_alpha": True,
+                "despeckle": True,
+            },
+        )["groups"]["base"]
+        second_small = next(item for item in second["outputs"] if item["width"] == 32)
+        second_large = next(item for item in second["outputs"] if item["width"] == 256)
+        self.assertNotEqual(
+            first_small_bytes,
+            self.manager.processed_file(draft_id, second_small["stored_name"]).read_bytes(),
+        )
+        self.assertEqual(
+            first_large_bytes,
+            self.manager.processed_file(draft_id, second_large["stored_name"]).read_bytes(),
+        )
+        self.assertEqual(second["quality"]["downscale_filter"], "lanczos")
+        self.assertEqual(second["quality"]["sharpen"], 2.5)
+        self.assertEqual(second["quality"]["colour_count"], 24)
+        self.assertTrue(second["quality"]["hard_alpha"])
+
+    def test_animation_quality_reprocess_preserves_detection_settings(self) -> None:
+        draft_id = "draft-quality-animation"
+        first = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "walk",
+            png_bytes(separated_sheet(16)),
+        )["groups"]["walk"]
+        original_detection = dict(first["settings"])
+
+        updated = self.manager.reprocess(
+            draft_id,
+            "mob",
+            "walk",
+            {
+                "downscale_filter": "box",
+                "preblur": 0,
+                "sharpen": 2.2,
+                "quantize": True,
+                "colour_count": 32,
+                "hard_alpha": True,
+            },
+        )["groups"]["walk"]
+        self.assertEqual(updated["settings"], original_detection)
+        self.assertEqual(updated["quality"]["downscale_filter"], "box")
+        self.assertEqual(updated["quality"]["sharpen"], 2.2)
+        self.assertEqual(updated["quality"]["colour_count"], 32)
+        with self.assertRaises(app.AppError):
+            self.manager.reprocess(draft_id, "mob", "walk", {"sharpen": 4.1})
+
     def _make_complete_draft(self, draft_id: str, profile_key: str) -> None:
         metadata = self.manager.load(draft_id, profile_key)
         processed = self.manager.draft_dir(draft_id) / "processed"

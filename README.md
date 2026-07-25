@@ -27,12 +27,13 @@ If the app is stored elsewhere, open **Settings** and enter the absolute path to
 
 1. Open **New Monster** or **New Player**.
 2. Enter the name, lowercase folder prefix and visual description.
-3. Optionally choose **Save details file** to keep a portable JSON copy of the name, folder and description. **Load details file** restores it later. The live draft is also saved automatically.
+3. Optionally choose **Save details file** to keep a portable JSON copy of the name, folder, description, crop, detection choices and 32×32 processing presets. **Load details file** restores them later. The live draft is also saved automatically.
 4. Generate the prompts and copy each prompt into your image-generation conversation. Use the same base reference image for every animation prompt.
 5. Upload one PNG, JPEG or WebP source artwork image. Drag, scale and position it in the crop tool; one crop produces the 256×256 `_large` image and the 32×32 base sprite.
-6. Upload the returned PNG for each animation group. The normaliser runs immediately and shows the finished animations.
-7. Resolve any remaining frame-count or transparency errors. Open **Sprite detection controls** to adjust the grid, alpha threshold, component area or row tolerance and reprocess the original upload without uploading it again.
-8. Choose **Export to folder**. The game-ready files go to `entity_sprites\default`, and the untouched full-size uploads go to `depth-hammer-spritesheet-assistant\source_assets\<folder-name>`.
+6. Open **32×32 output controls** to choose a quick preset or directly adjust the downscale filter, pre-shrink blur, sharpness, palette size, alpha-aware resizing and edge cleanup. The same controls are available for every animation upload.
+7. Upload the returned PNG for each animation group. The normaliser runs immediately and shows both an enlarged inspection view and a true 32×32 in-game preview of every final frame.
+8. Resolve any remaining frame-count or transparency errors. Open **Sprite detection controls** to adjust the grid, alpha threshold, component area or row tolerance and reprocess the original upload without uploading it again.
+9. Choose **Export to folder**. The game-ready files go to `entity_sprites\default`, and the untouched full-size uploads go to `depth-hammer-spritesheet-assistant\source_assets\<folder-name>`.
 
 Combined directional sheets are expected in this order:
 
@@ -65,11 +66,11 @@ Prompt wording can be changed in the **Prompt Templates** tab. It is stored in `
 
 The required groups, output filenames, frame counts, direction order and playback speeds are data-driven in `config\sprite_profiles.json`.
 
-The normaliser settings are in `mob_anim_batch.json`. The supplied defaults retain the existing alpha-aware downscaling, colour treatment, blob detection and left-facing melee reversal.
+The normaliser settings are in `mob_anim_batch.json`. The supplied defaults retain the existing alpha-aware downscaling, colour treatment, blob detection and left-facing melee reversal. Per-upload quality controls override only the current draft group; those overrides are saved with the draft and in portable creature details files.
 
 ## Drafts
 
-Uploads, crop settings, detection settings, name, folder and description are kept under `workspace\drafts`. This directory, `.venv` and `source_assets` are ignored by Git. **Start fresh draft** removes only that draft's temporary files; it never touches exported game or full-size source assets.
+Uploads, crop settings, detection settings, 32×32 quality presets, name, folder and description are kept under `workspace\drafts`. This directory, `.venv` and `source_assets` are ignored by Git. **Start fresh draft** removes only that draft's temporary files; it never touches exported game or full-size source assets.
 
 ## Troubleshooting
 

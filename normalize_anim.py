@@ -38,7 +38,7 @@ import sys
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
@@ -626,29 +626,86 @@ def clear_fully_transparent_rgb(image: Image.Image) -> Image.Image:
     return Image.merge("RGBA", (r, g, b, a))
 
 
-def resize_rgba_canvas(image: Image.Image, size: tuple[int, int], *, pixel_art: bool = False) -> Image.Image:
+def resize_rgba_canvas(
+    image: Image.Image,
+    size: tuple[int, int],
+    *,
+    pixel_art: bool = False,
+    settings: Optional[Mapping[str, Any]] = None,
+) -> Image.Image:
     """Resize a complete transparent canvas with the shrinker's alpha-safe path.
 
     The assistant's crop tool uses this for its 256px examine image and again
     for the derived 32px sprite.  Keeping it here means those images use the
     same premultiplied-alpha, gamma-correct downscaling as animation frames.
+    ``settings`` exposes the same quality controls used by the animation
+    normalizer without changing existing callers that rely on ``pixel_art``.
     """
+
+    quality: dict[str, Any] = {
+        "downscale_filter": "auto",
+        "alpha_aware": True,
+        "gamma_correct": True,
+        "preblur": 0.0,
+        "sharpen": 1.45 if pixel_art else 1.0,
+        "quantize": pixel_art,
+        "colour_count": 48,
+        "posterize_bits": 0,
+        "alpha_cleanup": pixel_art,
+        "alpha_low_cutoff": 6,
+        "alpha_high_cutoff": 250,
+        "hard_alpha": False,
+        "despeckle": False,
+        "despeckle_min_area": 2,
+    }
+    if settings:
+        quality.update(settings)
 
     working = clear_fully_transparent_rgb(image)
     if working.size == size:
         resized = working.copy()
     else:
         scale = min(size[0] / max(1, working.width), size[1] / max(1, working.height))
-        resample = Image.Resampling.LANCZOS if scale < 1.0 else Image.Resampling.BICUBIC
-        if np is not None:
-            resized = resize_rgba_alpha_aware_numpy(working, size, resample, gamma_correct=True)
+        filter_name = str(quality.get("downscale_filter", "auto"))
+        if filter_name == "auto":
+            resample = Image.Resampling.LANCZOS if scale < 1.0 else Image.Resampling.BICUBIC
+        else:
+            resample = RESAMPLE_FILTERS.get(filter_name, Image.Resampling.LANCZOS)
+
+        blur_radius = resolve_preblur_radius(quality.get("preblur", 0.0), scale)
+        if blur_radius > 0:
+            working = working.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+
+        if bool(quality.get("alpha_aware", True)) and np is not None:
+            resized = resize_rgba_alpha_aware_numpy(
+                working,
+                size,
+                resample,
+                gamma_correct=bool(quality.get("gamma_correct", True)),
+            )
         else:
             resized = working.resize(size, resample=resample)
 
-    if pixel_art:
-        resized = ImageEnhance.Sharpness(resized).enhance(1.45)
-        resized = quantize_rgba_colours(resized, 48)
-        resized = cleanup_alpha(resized, low_cutoff=6, high_cutoff=250, hard_alpha=False)
+    sharpen = float(quality.get("sharpen", 1.0))
+    if sharpen != 1.0:
+        resized = ImageEnhance.Sharpness(resized).enhance(sharpen)
+    posterize_bits = int(quality.get("posterize_bits", 0))
+    if posterize_bits > 0:
+        resized = posterize_rgba(resized, posterize_bits)
+    if bool(quality.get("quantize", False)):
+        resized = quantize_rgba_colours(resized, int(quality.get("colour_count", 48)))
+    if bool(quality.get("alpha_cleanup", False)):
+        resized = cleanup_alpha(
+            resized,
+            low_cutoff=int(quality.get("alpha_low_cutoff", 6)),
+            high_cutoff=int(quality.get("alpha_high_cutoff", 250)),
+            hard_alpha=bool(quality.get("hard_alpha", False)),
+        )
+    if bool(quality.get("despeckle", False)):
+        resized = remove_small_alpha_specks(
+            resized,
+            int(quality.get("despeckle_min_area", 2)),
+        )
     return clear_fully_transparent_rgb(resized)
 
 

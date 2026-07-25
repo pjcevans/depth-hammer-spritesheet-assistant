@@ -30,10 +30,15 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from PIL import Image, UnidentifiedImageError
 
-from normalize_anim import NormalizationError, normalize_uploaded_sheet, resize_rgba_canvas
+from normalize_anim import (
+    DEFAULT_BATCH_CONFIG,
+    NormalizationError,
+    normalize_uploaded_sheet,
+    resize_rgba_canvas,
+)
 
 
-APP_VERSION = "1.1.3"
+APP_VERSION = "1.2.0"
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 CONFIG_DIR = APP_DIR / "config"
@@ -253,9 +258,19 @@ def load_normalizer_defaults() -> dict[str, Any]:
     defaults = data.get("defaults", {})
     if not isinstance(defaults, dict):
         raise AppError("mob_anim_batch.json defaults must be an object.", 500)
+    built_in_defaults = DEFAULT_BATCH_CONFIG.get("defaults", {})
+    if not isinstance(built_in_defaults, dict):
+        raise AppError("The normalizer's built-in defaults are invalid.", 500)
     # Uploaded combined sheets must be processed in reading order. Per-output
     # reversal is handled after splitting.
-    return {**defaults, "reverse": False, "allow_missing": False, "fit": True, "cell": 32}
+    return {
+        **built_in_defaults,
+        **defaults,
+        "reverse": False,
+        "allow_missing": False,
+        "fit": True,
+        "cell": 32,
+    }
 
 
 def png_dimensions(path: Path) -> tuple[int, int, str]:
@@ -417,6 +432,96 @@ class DraftManager:
             raise AppError(f"{label} must be between {minimum:g} and {maximum:g}.")
         return result
 
+    @staticmethod
+    def _boolean(value: Any, label: str) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        if isinstance(value, int) and value in {0, 1}:
+            return bool(value)
+        raise AppError(f"{label} must be on or off.")
+
+    def _quality_settings(self, supplied: Optional[dict[str, Any]]) -> dict[str, Any]:
+        supplied = supplied or {}
+        nested = supplied.get("quality")
+        if isinstance(nested, dict):
+            supplied = {**supplied, **nested}
+        defaults = self.normalizer_defaults
+
+        filter_name = str(supplied.get("downscale_filter", defaults.get("downscale_filter", "auto"))).strip().lower()
+        valid_filters = {"auto", "nearest", "box", "bilinear", "bicubic", "lanczos"}
+        if filter_name not in valid_filters:
+            raise AppError("Downscale filter must be automatic, nearest, box, bilinear, bicubic or Lanczos.")
+
+        try:
+            colour_count = int(supplied.get("colour_count", defaults.get("colour_count", 48)))
+        except (TypeError, ValueError) as exc:
+            raise AppError("Palette colours must be a whole number.") from exc
+        if colour_count < 2 or colour_count > 256:
+            raise AppError("Palette colours must be between 2 and 256.")
+
+        default_preblur = defaults.get("preblur", 0.15)
+        if isinstance(default_preblur, str):
+            default_preblur = 0.15
+        try:
+            alpha_low_cutoff = int(defaults.get("alpha_low_cutoff", 6))
+            alpha_high_cutoff = int(defaults.get("alpha_high_cutoff", 250))
+            despeckle_min_area = int(defaults.get("despeckle_min_area", 2))
+            posterize_bits = int(defaults.get("posterize_bits", 0))
+        except (TypeError, ValueError) as exc:
+            raise AppError("The normalizer quality defaults are invalid.", 500) from exc
+
+        return {
+            "quality_mode": "max",
+            "downscale_filter": filter_name,
+            "alpha_aware": self._boolean(
+                supplied.get("alpha_aware", defaults.get("alpha_aware", True)),
+                "Alpha-aware resizing",
+            ),
+            "gamma_correct": self._boolean(
+                supplied.get("gamma_correct", defaults.get("gamma_correct", True)),
+                "Gamma-correct resizing",
+            ),
+            "preblur": self._number(
+                supplied.get("preblur", default_preblur),
+                "Pre-shrink blur",
+                0.0,
+                2.0,
+            ),
+            "sharpen": self._number(
+                supplied.get("sharpen", defaults.get("sharpen", 1.45)),
+                "Sharpness",
+                0.0,
+                4.0,
+            ),
+            "quantize": self._boolean(
+                supplied.get("quantize", defaults.get("quantize", True)),
+                "Palette reduction",
+            ),
+            "colour_count": colour_count,
+            "posterize_bits": max(0, min(8, posterize_bits)),
+            "alpha_cleanup": self._boolean(
+                supplied.get("alpha_cleanup", defaults.get("alpha_cleanup", True)),
+                "Alpha cleanup",
+            ),
+            "alpha_low_cutoff": max(0, min(255, alpha_low_cutoff)),
+            "alpha_high_cutoff": max(0, min(255, alpha_high_cutoff)),
+            "hard_alpha": self._boolean(
+                supplied.get("hard_alpha", defaults.get("hard_alpha", False)),
+                "Hard alpha edges",
+            ),
+            "despeckle": self._boolean(
+                supplied.get("despeckle", defaults.get("despeckle", False)),
+                "Despeckle",
+            ),
+            "despeckle_min_area": max(1, min(64, despeckle_min_area)),
+        }
+
     def _detection_settings(
         self,
         group: dict[str, Any],
@@ -469,6 +574,9 @@ class DraftManager:
 
     def _crop_settings(self, supplied: Optional[dict[str, Any]]) -> dict[str, float]:
         supplied = supplied or {}
+        nested = supplied.get("crop")
+        if isinstance(nested, dict):
+            supplied = {**supplied, **nested}
         return {
             "zoom": self._number(supplied.get("zoom", 1.0), "Scale", 0.1, 6.0),
             "pan_x": self._number(supplied.get("pan_x", 0.0), "Horizontal position", -2.0, 2.0),
@@ -527,6 +635,7 @@ class DraftManager:
                 saved["crop_bbox"] = list(source_bbox) if source_bbox is not None else [0, 0, source_width, source_height]
             else:
                 saved["settings"] = self._detection_settings(group, processing, source_width, source_height)
+            saved["quality"] = self._quality_settings(processing)
             metadata["groups"][group_id] = saved
             self.save(draft_id, metadata)
             return self._process_existing(draft_id, profile_key, group_id)
@@ -544,12 +653,17 @@ class DraftManager:
             saved = metadata.get("groups", {}).get(group_id)
             if not saved or not saved.get("raw_name"):
                 raise AppError("Upload an image for this group before reprocessing it.")
+            processing = processing or {}
             if group["mode"] == "crop_pair":
-                saved["crop"] = self._crop_settings(processing)
+                saved["crop"] = self._crop_settings({**saved.get("crop", {}), **processing})
             else:
                 saved["settings"] = self._detection_settings(
-                    group, processing, int(saved.get("source_width", 1)), int(saved.get("source_height", 1))
+                    group,
+                    {**saved.get("settings", {}), **processing},
+                    int(saved.get("source_width", 1)),
+                    int(saved.get("source_height", 1)),
                 )
+            saved["quality"] = self._quality_settings({**saved.get("quality", {}), **processing})
             self.save(draft_id, metadata)
             return self._process_existing(draft_id, profile_key, group_id)
 
@@ -560,6 +674,7 @@ class DraftManager:
         group_id: str,
         group: dict[str, Any],
         crop: dict[str, Any],
+        quality: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], list[str], list[int]]:
         with Image.open(raw_path) as source_file:
             source = source_file.convert("RGBA")
@@ -582,7 +697,11 @@ class DraftManager:
         warnings: list[str] = []
         for index, spec in enumerate(group["outputs"]):
             size = (int(spec["size"][0]), int(spec["size"][1]))
-            image = canvas.copy() if size == large_size else resize_rgba_canvas(canvas, size, pixel_art=True)
+            image = (
+                canvas.copy()
+                if size == large_size
+                else resize_rgba_canvas(canvas, size, pixel_art=True, settings=quality)
+            )
             stored_name = f"{group_id}__{index}.png"
             output_path = output_dir / stored_name
             image.save(output_path, optimize=True)
@@ -680,9 +799,11 @@ class DraftManager:
         temporary_strip: Path,
         group: dict[str, Any],
         settings: dict[str, Any],
+        quality: dict[str, Any],
     ) -> tuple[str, str]:
         common = {
             **self.normalizer_defaults,
+            **quality,
             "alpha_threshold": settings["alpha_threshold"],
             "min_blob_area": settings["min_blob_area"],
             "row_tolerance": settings["row_tolerance"],
@@ -780,7 +901,12 @@ class DraftManager:
         try:
             if group["mode"] == "crop_pair":
                 records, warnings, bbox = self._render_crop_pair(
-                    raw_path, output_dir, group_id, group, saved.get("crop", self._crop_settings(None))
+                    raw_path,
+                    output_dir,
+                    group_id,
+                    group,
+                    saved.get("crop", self._crop_settings(None)),
+                    saved.get("quality", self._quality_settings(None)),
                 )
                 saved["crop_bbox"] = bbox
                 saved["processing_method"] = "Interactive crop"
@@ -797,7 +923,11 @@ class DraftManager:
                     records.append(self._record_output(stored_name, output_path, spec))
             else:
                 method, method_label = self._run_normalizer(
-                    raw_path, temporary_strip, group, saved.get("settings", self._detection_settings(group, None, 1, 1))
+                    raw_path,
+                    temporary_strip,
+                    group,
+                    saved.get("settings", self._detection_settings(group, None, 1, 1)),
+                    saved.get("quality", self._quality_settings(None)),
                 )
                 saved["detection_method"] = method
                 saved["processing_method"] = method_label
@@ -1308,7 +1438,27 @@ class RequestHandler(BaseHTTPRequestHandler):
     def _processing_query(self) -> dict[str, Any]:
         query = self._query()
         result: dict[str, Any] = {}
-        for key in ("mode", "columns", "rows", "alpha_threshold", "min_blob_area", "row_tolerance"):
+        for key in (
+            "mode",
+            "columns",
+            "rows",
+            "alpha_threshold",
+            "min_blob_area",
+            "row_tolerance",
+            "zoom",
+            "pan_x",
+            "pan_y",
+            "downscale_filter",
+            "preblur",
+            "sharpen",
+            "quantize",
+            "colour_count",
+            "alpha_aware",
+            "gamma_correct",
+            "alpha_cleanup",
+            "hard_alpha",
+            "despeckle",
+        ):
             values = query.get(key)
             if values and values[0] != "":
                 result[key] = values[0]
@@ -1351,6 +1501,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                         "min_blob_area": int(state.drafts.normalizer_defaults.get("min_blob_area", 64)),
                         "row_tolerance": int(state.drafts.normalizer_defaults.get("row_tolerance", 12)),
                     },
+                    "quality_defaults": state.drafts._quality_settings(None),
                 })
             elif path == "/api/library":
                 self._send_json({"ok": True, **state.library_scan()})

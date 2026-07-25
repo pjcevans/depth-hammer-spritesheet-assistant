@@ -243,6 +243,41 @@ function addSpritePreview(container, asset, url) {
   if (visibilityObserver) visibilityObserver.observe(canvas);
 }
 
+function addSpritePreviewComparison(container, asset, url) {
+  const frames = Math.max(1, Number(asset.frames || 1));
+  const width = Number(asset.width || asset.frame_width || 32);
+  const height = Number(asset.height || asset.frame_height || 32);
+  const frameWidth = Number(asset.frame_width || (width % frames === 0 ? width / frames : width));
+  const frameHeight = Number(asset.frame_height || height);
+  if (frameWidth !== 32 || frameHeight !== 32) {
+    addSpritePreview(container, asset, url);
+    return;
+  }
+
+  container.classList.add("preview-comparison");
+  const enlarged = document.createElement("div");
+  enlarged.className = "preview-stage enlarged";
+  const enlargedLabel = document.createElement("span");
+  enlargedLabel.className = "preview-stage-label";
+  enlargedLabel.textContent = "Enlarged preview";
+  const enlargedMedia = document.createElement("div");
+  enlargedMedia.className = "preview-media";
+  enlarged.append(enlargedMedia, enlargedLabel);
+
+  const actual = document.createElement("div");
+  actual.className = "preview-stage actual";
+  const actualLabel = document.createElement("span");
+  actualLabel.className = "preview-stage-label";
+  actualLabel.textContent = "32×32 in game";
+  const actualMedia = document.createElement("div");
+  actualMedia.className = "preview-media";
+  actual.append(actualMedia, actualLabel);
+
+  container.append(enlarged, actual);
+  addSpritePreview(enlargedMedia, asset, url);
+  addSpritePreview(actualMedia, asset, url);
+}
+
 function setActiveTab(tab) {
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === tab);
@@ -329,6 +364,167 @@ function setDetectionControls(view, settings = null) {
   view.card.querySelector(".detect-row").value = value.row_tolerance ?? 12;
 }
 
+const QUALITY_KEYS = [
+  "downscale_filter",
+  "preblur",
+  "sharpen",
+  "quantize",
+  "colour_count",
+  "alpha_aware",
+  "gamma_correct",
+  "alpha_cleanup",
+  "hard_alpha",
+  "despeckle",
+];
+
+function qualityPresetValues() {
+  const defaults = state.bootstrap.quality_defaults || {};
+  return {
+    balanced: {
+      ...defaults,
+      downscale_filter: defaults.downscale_filter || "auto",
+      preblur: Number(defaults.preblur ?? 0.15),
+      sharpen: Number(defaults.sharpen ?? 1.45),
+      quantize: defaults.quantize ?? true,
+      colour_count: Number(defaults.colour_count ?? 48),
+      alpha_aware: defaults.alpha_aware ?? true,
+      gamma_correct: defaults.gamma_correct ?? true,
+      alpha_cleanup: defaults.alpha_cleanup ?? true,
+      hard_alpha: defaults.hard_alpha ?? false,
+      despeckle: defaults.despeckle ?? false,
+    },
+    crisp: {
+      ...defaults,
+      downscale_filter: "lanczos",
+      preblur: 0,
+      sharpen: 1.9,
+      quantize: true,
+      colour_count: 40,
+      alpha_aware: true,
+      gamma_correct: true,
+      alpha_cleanup: true,
+      hard_alpha: false,
+      despeckle: false,
+    },
+    hard: {
+      ...defaults,
+      downscale_filter: "nearest",
+      preblur: 0,
+      sharpen: 1,
+      quantize: true,
+      colour_count: 32,
+      alpha_aware: true,
+      gamma_correct: false,
+      alpha_cleanup: true,
+      hard_alpha: true,
+      despeckle: true,
+    },
+    smooth: {
+      ...defaults,
+      downscale_filter: "lanczos",
+      preblur: 0.35,
+      sharpen: 1.1,
+      quantize: false,
+      colour_count: 64,
+      alpha_aware: true,
+      gamma_correct: true,
+      alpha_cleanup: true,
+      hard_alpha: false,
+      despeckle: false,
+    },
+  };
+}
+
+function qualitySettings(view) {
+  return {
+    downscale_filter: view.card.querySelector(".quality-filter").value,
+    preblur: Number(view.card.querySelector(".quality-preblur").value),
+    sharpen: Number(view.card.querySelector(".quality-sharpen").value),
+    quantize: view.card.querySelector(".quality-quantize").checked,
+    colour_count: Number(view.card.querySelector(".quality-colours").value),
+    alpha_aware: view.card.querySelector(".quality-alpha-aware").checked,
+    gamma_correct: view.card.querySelector(".quality-gamma").checked,
+    alpha_cleanup: view.card.querySelector(".quality-alpha-cleanup").checked,
+    hard_alpha: view.card.querySelector(".quality-hard-alpha").checked,
+    despeckle: view.card.querySelector(".quality-despeckle").checked,
+  };
+}
+
+function updateQualityLabels(view) {
+  const values = qualitySettings(view);
+  view.card.querySelector(".quality-sharpen-value").textContent = `${values.sharpen.toFixed(2)}×`;
+  view.card.querySelector(".quality-preblur-value").textContent = `${values.preblur.toFixed(2)} px`;
+  view.card.querySelector(".quality-colours-value").textContent = String(values.colour_count);
+  view.card.querySelector(".quality-colours").disabled = !values.quantize;
+}
+
+function sameQualitySettings(left, right) {
+  return QUALITY_KEYS.every((key) => {
+    if (typeof left[key] === "number" || typeof right[key] === "number") {
+      return Math.abs(Number(left[key]) - Number(right[key])) < 0.001;
+    }
+    return left[key] === right[key];
+  });
+}
+
+function setQualityControls(view, settings = null, preferredPreset = "") {
+  const presets = qualityPresetValues();
+  const values = { ...presets.balanced, ...(settings || {}) };
+  view.card.querySelector(".quality-filter").value = values.downscale_filter || "auto";
+  view.card.querySelector(".quality-preblur").value = Number(values.preblur ?? 0.15);
+  view.card.querySelector(".quality-sharpen").value = Number(values.sharpen ?? 1.45);
+  view.card.querySelector(".quality-quantize").checked = Boolean(values.quantize);
+  view.card.querySelector(".quality-colours").value = Number(values.colour_count ?? 48);
+  view.card.querySelector(".quality-alpha-aware").checked = Boolean(values.alpha_aware);
+  view.card.querySelector(".quality-gamma").checked = Boolean(values.gamma_correct);
+  view.card.querySelector(".quality-alpha-cleanup").checked = Boolean(values.alpha_cleanup);
+  view.card.querySelector(".quality-hard-alpha").checked = Boolean(values.hard_alpha);
+  view.card.querySelector(".quality-despeckle").checked = Boolean(values.despeckle);
+  const matched = Object.entries(presets).find(([_name, preset]) => sameQualitySettings(values, preset));
+  view.card.querySelector(".quality-preset").value = preferredPreset && presets[preferredPreset]
+    ? preferredPreset
+    : (matched ? matched[0] : "custom");
+  updateQualityLabels(view);
+}
+
+function processingSettings(view) {
+  const settings = { ...qualitySettings(view) };
+  if (view.group.mode === "crop_pair") {
+    Object.assign(settings, cropValues(view));
+  } else if (view.group.mode !== "passthrough") {
+    Object.assign(settings, detectionSettings(view));
+  }
+  return settings;
+}
+
+function wireQualityControls(view) {
+  const card = view.card;
+  const preset = card.querySelector(".quality-preset");
+  preset.addEventListener("change", () => {
+    if (preset.value === "custom") return;
+    setQualityControls(view, qualityPresetValues()[preset.value], preset.value);
+  });
+  [
+    ".quality-filter",
+    ".quality-preblur",
+    ".quality-sharpen",
+    ".quality-quantize",
+    ".quality-colours",
+    ".quality-alpha-aware",
+    ".quality-gamma",
+    ".quality-alpha-cleanup",
+    ".quality-hard-alpha",
+    ".quality-despeckle",
+  ].forEach((selector) => {
+    card.querySelector(selector).addEventListener("input", () => {
+      preset.value = "custom";
+      updateQualityLabels(view);
+    });
+  });
+  card.querySelector(".apply-quality").addEventListener("click", () => reprocessGroup(view));
+  setQualityControls(view);
+}
+
 function cropValues(view) {
   return {
     zoom: Number(view.card.querySelector(".crop-zoom").value),
@@ -373,11 +569,16 @@ function drawCropPreview(view) {
   );
 }
 
-function setCropControls(view, saved) {
-  const crop = saved.crop || { zoom: 1, pan_x: 0, pan_y: 0 };
+function setCropInputValues(view, crop = null) {
+  crop = crop || { zoom: 1, pan_x: 0, pan_y: 0 };
   view.card.querySelector(".crop-zoom").value = crop.zoom ?? 1;
   view.card.querySelector(".crop-x").value = crop.pan_x ?? 0;
   view.card.querySelector(".crop-y").value = crop.pan_y ?? 0;
+  updateCropLabels(view);
+}
+
+function setCropControls(view, saved) {
+  setCropInputValues(view, saved.crop);
   view.cropBox = saved.crop_bbox || [0, 0, saved.source_width || 1, saved.source_height || 1];
   if (view.cropRawVersion !== saved.raw_version) {
     view.cropRawVersion = saved.raw_version;
@@ -403,7 +604,7 @@ function wireCropControls(view) {
     card.querySelector(".crop-y").value = 0;
     drawCropPreview(view);
   });
-  card.querySelector(".apply-crop").addEventListener("click", () => reprocessGroup(view, cropValues(view)));
+  card.querySelector(".apply-crop").addEventListener("click", () => reprocessGroup(view));
 
   const wrap = card.querySelector(".crop-canvas-wrap");
   const canvas = card.querySelector(".crop-canvas");
@@ -440,7 +641,12 @@ async function reprocessGroup(view, processing = null) {
   const button = view.group.mode === "crop_pair"
     ? view.card.querySelector(".apply-crop")
     : view.card.querySelector(".reprocess-group");
-  button.disabled = true;
+  const relatedButtons = [
+    view.card.querySelector(".apply-crop"),
+    view.card.querySelector(".reprocess-group"),
+    view.card.querySelector(".apply-quality"),
+  ].filter(Boolean);
+  relatedButtons.forEach((item) => { item.disabled = true; });
   const oldText = button.textContent;
   button.textContent = "Processing…";
   try {
@@ -450,7 +656,7 @@ async function reprocessGroup(view, processing = null) {
         draft: view.creator.draftId,
         profile: view.creator.profileKey,
         group: view.group.id,
-        processing: processing || detectionSettings(view),
+        processing: processing || processingSettings(view),
       },
     });
     view.creator.draftStatus = result;
@@ -460,18 +666,37 @@ async function reprocessGroup(view, processing = null) {
     toast(error.message, "error");
     await loadCreatorDraft(view.creator, false);
   } finally {
-    button.disabled = false;
+    relatedButtons.forEach((item) => { item.disabled = false; });
     button.textContent = oldText;
   }
 }
 
+function collectProcessingPresets(creator) {
+  const presets = {};
+  creator.cards.forEach((view, groupId) => {
+    if (view.group.mode === "passthrough") return;
+    const entry = {
+      preset: view.card.querySelector(".quality-preset").value,
+      quality: qualitySettings(view),
+    };
+    if (view.group.mode === "crop_pair") {
+      entry.crop = cropValues(view);
+    } else {
+      entry.detection = detectionSettings(view);
+    }
+    presets[groupId] = entry;
+  });
+  return presets;
+}
+
 function saveDetailsFile(creator) {
   const details = {
-    version: 1,
+    version: 2,
     profile: creator.profileKey,
     name: creator.nameInput.value.trim(),
     slug: creator.slugInput.value.trim(),
     description: creator.descriptionInput.value.trim(),
+    processing_presets: collectProcessingPresets(creator),
   };
   const blob = new Blob([`${JSON.stringify(details, null, 2)}\n`], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -503,7 +728,25 @@ async function loadDetailsFile(creator, file) {
       promptArea.value = buildPrompt(creator.profile, group, creator.nameInput.value, creator.descriptionInput.value);
     });
     renderCreatorDraft(creator);
-    toast("Sprite details loaded.");
+    const presets = details.processing_presets && typeof details.processing_presets === "object"
+      ? details.processing_presets
+      : {};
+    creator.cards.forEach((view, groupId) => {
+      const saved = presets[groupId];
+      if (!saved || typeof saved !== "object") return;
+      if (saved.quality && typeof saved.quality === "object") {
+        setQualityControls(view, saved.quality, typeof saved.preset === "string" ? saved.preset : "");
+      }
+      if (view.group.mode === "crop_pair" && saved.crop && typeof saved.crop === "object") {
+        setCropInputValues(view, saved.crop);
+        drawCropPreview(view);
+      } else if (view.group.mode !== "passthrough" && saved.detection && typeof saved.detection === "object") {
+        setDetectionControls(view, saved.detection);
+      }
+    });
+    toast(Object.keys(presets).length
+      ? "Sprite details and 32×32 processing presets loaded."
+      : "Sprite details loaded.");
   } catch (error) {
     toast(`Could not load details: ${error.message}`, "error");
   }
@@ -565,6 +808,10 @@ function renderCreation(profileKey) {
     });
     const view = { card, group, promptArea, input, creator, cropImage: null, cropRawVersion: null };
     creator.cards.set(group.id, view);
+    if (group.mode !== "passthrough") {
+      card.querySelector(".quality-controls").classList.remove("hidden");
+      wireQualityControls(view);
+    }
     if (isCrop) {
       wireCropControls(view);
     } else if (group.mode !== "passthrough") {
@@ -682,7 +929,7 @@ async function uploadGroup(creator, group, file) {
       draft: creator.draftId,
       profile: creator.profileKey,
       group: group.id,
-      ...(cropMode ? {} : detectionSettings(view)),
+      ...(group.mode === "passthrough" ? {} : processingSettings(view)),
     };
     const result = await api(buildUrl("/api/upload", params), {
       method: "POST",
@@ -742,6 +989,23 @@ function renderCreatorDraft(creator) {
         ? `Last result: ${saved.processing_method}`
         : "No image processed yet.";
     }
+    if (view.group.mode !== "passthrough") {
+      const qualityButton = view.card.querySelector(".apply-quality");
+      qualityButton.disabled = !saved || !saved.raw_name;
+      if (saved && saved.quality) {
+        const qualitySignature = JSON.stringify(saved.quality);
+        if (view.qualitySignature !== qualitySignature) {
+          view.qualitySignature = qualitySignature;
+          setQualityControls(view, saved.quality);
+        }
+        view.card.querySelector(".quality-note").textContent =
+          `Last output: ${saved.quality.downscale_filter} filter, ${Number(saved.quality.sharpen).toFixed(2)}× sharpness, `
+          + `${saved.quality.quantize ? `${saved.quality.colour_count}-colour palette` : "full colour"}.`;
+      } else {
+        view.card.querySelector(".quality-note").textContent =
+          "Settings are kept with the draft and included in creature detail save files.";
+      }
+    }
     if (saved && saved.ready) {
       view.card.classList.add("ready");
       badge.textContent = "Ready";
@@ -755,7 +1019,11 @@ function renderCreatorDraft(creator) {
         const preview = document.createElement("div");
         preview.className = "asset-preview";
         const finalName = `${creator.slugInput.value || "name"}${record.suffix}`;
-        addSpritePreview(preview, { ...record, name: finalName, frame_width: record.width / record.frames, frame_height: record.height }, draftMediaUrl(creator.draftId, record.stored_name));
+        addSpritePreviewComparison(
+          preview,
+          { ...record, name: finalName, frame_width: record.width / record.frames, frame_height: record.height },
+          draftMediaUrl(creator.draftId, record.stored_name),
+        );
         const name = document.createElement("div");
         name.className = "processed-name";
         name.textContent = `${finalName} · ${record.width}x${record.height}`;
@@ -1018,7 +1286,7 @@ function renderLibraryDetail(entity) {
     if (asset.error) {
       preview.textContent = asset.error;
     } else {
-      addSpritePreview(preview, asset, mediaUrl(asset.relative_path));
+      addSpritePreviewComparison(preview, asset, mediaUrl(asset.relative_path));
     }
     const meta = document.createElement("div");
     meta.className = "asset-meta";

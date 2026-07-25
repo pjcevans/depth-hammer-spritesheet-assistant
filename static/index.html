@@ -235,12 +235,63 @@
             <label><span>Up / down <output class="crop-y-value">0%</output></span><input class="crop-y" type="range" min="-2" max="2" step="0.01" value="0"></label>
             <div class="button-row">
               <button class="button ghost crop-reset" type="button">Reset crop</button>
-              <button class="button primary apply-crop" type="button">Apply crop</button>
+              <button class="button primary apply-crop" type="button">Apply crop + output</button>
             </div>
             <p class="crop-status">The same crop makes a 256x256 examine image and a 32x32 base sprite.</p>
           </div>
         </div>
       </div>
+      <details class="quality-controls hidden">
+        <summary>32×32 output controls</summary>
+        <p class="quality-intro">These settings use the Python shrinker itself. Compare the enlarged preview with the true-size in-game preview below after applying changes.</p>
+        <div class="quality-grid">
+          <label>
+            <span>Quick preset</span>
+            <select class="quality-preset">
+              <option value="balanced">Balanced detail</option>
+              <option value="crisp">Crisp pixel art</option>
+              <option value="hard">Hard pixel edges</option>
+              <option value="smooth">Smooth reduction</option>
+              <option value="custom">Custom settings</option>
+            </select>
+          </label>
+          <label>
+            <span>Downscale filter</span>
+            <select class="quality-filter">
+              <option value="auto">Automatic / Lanczos</option>
+              <option value="lanczos">Lanczos</option>
+              <option value="bicubic">Bicubic</option>
+              <option value="box">Box</option>
+              <option value="bilinear">Bilinear</option>
+              <option value="nearest">Nearest neighbour</option>
+            </select>
+          </label>
+          <label class="quality-range">
+            <span>Sharpness <output class="quality-sharpen-value">1.45×</output></span>
+            <input class="quality-sharpen" type="range" min="0" max="4" step="0.05" value="1.45">
+          </label>
+          <label class="quality-range">
+            <span>Pre-shrink blur <output class="quality-preblur-value">0.15 px</output></span>
+            <input class="quality-preblur" type="range" min="0" max="2" step="0.05" value="0.15">
+          </label>
+          <label class="quality-range">
+            <span>Palette colours <output class="quality-colours-value">48</output></span>
+            <input class="quality-colours" type="range" min="2" max="256" step="2" value="48">
+          </label>
+        </div>
+        <div class="quality-toggles">
+          <label><input class="quality-alpha-aware" type="checkbox" checked><span>Alpha-aware resize</span></label>
+          <label><input class="quality-gamma" type="checkbox" checked><span>Gamma-correct colours</span></label>
+          <label><input class="quality-quantize" type="checkbox" checked><span>Reduce colour palette</span></label>
+          <label><input class="quality-alpha-cleanup" type="checkbox" checked><span>Clean translucent edge noise</span></label>
+          <label><input class="quality-hard-alpha" type="checkbox"><span>Force hard alpha edges</span></label>
+          <label><input class="quality-despeckle" type="checkbox"><span>Remove one-pixel specks</span></label>
+        </div>
+        <div class="quality-actions">
+          <button class="button secondary apply-quality" type="button">Apply 32×32 settings</button>
+          <span class="quality-note">Settings are kept with the draft and included in creature detail save files.</span>
+        </div>
+      </details>
       <details class="detection-controls hidden">
         <summary>Sprite detection controls</summary>
         <p class="detection-intro">Automatic mode tries connected sprites first, then groups the image into an even grid if a creature has detached parts.</p>
