@@ -328,6 +328,51 @@ class SpritesheetAssistantTests(unittest.TestCase):
             "Automatic grid: 4×2, reading left-to-right then top-to-bottom",
         )
 
+    def test_uniform_frame_scale_preserves_wake_pose_sizes_and_order(self) -> None:
+        source = self.base / "wake-uniform-source.png"
+        output = self.base / "wake-uniform-output.png"
+        cell = 200
+        sheet = Image.new("RGBA", (8 * cell, cell), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(sheet)
+        source_heights = [40, 60, 80, 100, 120, 140, 160, 180]
+        colours = []
+        for index, height in enumerate(source_heights):
+            colour = (20 + index * 25, 80, 180, 255)
+            colours.append(colour)
+            left = index * cell + 70
+            draw.rectangle((left, cell - height, left + 59, cell - 1), fill=colour)
+        sheet.save(source)
+
+        normalize_uploaded_sheet(
+            source,
+            output,
+            frames=8,
+            cell=32,
+            config_overrides={
+                **self.manager.normalizer_defaults,
+                "source_cols": 8,
+                "source_rows": 1,
+                "uniform_frame_scale": True,
+                "quality_mode": "nearest",
+            },
+        )
+
+        with Image.open(output) as result:
+            rgba = result.convert("RGBA")
+            heights = []
+            sampled_colours = []
+            for index in range(8):
+                frame = rgba.crop((index * 32, 0, (index + 1) * 32, 32))
+                bbox = frame.getchannel("A").getbbox()
+                self.assertIsNotNone(bbox)
+                assert bbox is not None
+                heights.append(bbox[3] - bbox[1])
+                sampled_colours.append(frame.getpixel(((bbox[0] + bbox[2] - 1) // 2, bbox[3] - 1)))
+
+        self.assertEqual(heights, sorted(heights))
+        self.assertLess(heights[0], heights[-1] // 2)
+        self.assertEqual(sampled_colours, colours)
+
     def test_crop_pair_accepts_small_or_large_source(self) -> None:
         for draft_id, size in (("draft-crop-small", (32, 32)), ("draft-crop-large", (900, 500))):
             source = Image.new("RGBA", size, (0, 0, 0, 0))
