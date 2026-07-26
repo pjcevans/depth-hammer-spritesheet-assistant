@@ -99,7 +99,7 @@
           </label>
           <div id="template-list" class="template-list"></div>
         </div>
-        <p class="placeholder-help">Available placeholders: <code>{{name}}</code>, <code>{{description}}</code>, <code>{{subject}}</code>, <code>{{style}}</code> and <code>{{reference}}</code>.</p>
+        <p class="placeholder-help">Available placeholders: <code>{{name}}</code>, <code>{{description}}</code>, <code>{{subject}}</code>, <code>{{footprint}}</code>, <code>{{game_size}}</code>, <code>{{style}}</code> and <code>{{reference}}</code>.</p>
       </section>
 
       <section class="tab-panel" id="tab-settings" data-panel="settings">
@@ -161,6 +161,7 @@
             <span>Folder and filename prefix</span>
             <input class="folder-slug" type="text" placeholder="bandit" spellcheck="false">
           </label>
+          <div class="footprint-host"></div>
         </div>
         <label>
           <span>Description</span>
@@ -237,13 +238,13 @@
               <button class="button ghost crop-reset" type="button">Reset crop</button>
               <button class="button primary apply-crop" type="button">Apply crop + output</button>
             </div>
-            <p class="crop-status">The same crop makes a 256x256 examine image and a 32x32 base sprite.</p>
+            <p class="crop-status">The same crop makes a 256x256 examine image and a footprint-sized base sprite.</p>
           </div>
         </div>
       </div>
       <details class="quality-controls hidden">
-        <summary>32×32 output controls</summary>
-        <p class="quality-intro">These settings use the Python shrinker itself. Compare the enlarged preview with the true-size in-game preview below after applying changes.</p>
+        <summary><span class="quality-size">32×32</span> output controls</summary>
+        <p class="quality-intro">These settings use the Python shrinker itself. Compare the original source-frame preview with the true-size in-game preview below after applying changes.</p>
         <div class="quality-grid">
           <label>
             <span>Quick preset</span>

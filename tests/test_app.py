@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
@@ -38,13 +39,14 @@ def separated_sheet(frame_count: int, columns: int = 4) -> Image.Image:
     return image
 
 
-def finished_strip(frames: int) -> Image.Image:
-    image = Image.new("RGBA", (frames * 32, 32), (0, 0, 0, 0))
+def finished_strip(frames: int, cell: int = 32) -> Image.Image:
+    image = Image.new("RGBA", (frames * cell, cell), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     for index in range(frames):
-        x = index * 32
+        x = index * cell
         colour = ((index * 53 + 80) % 255, (index * 31 + 60) % 255, 140, 255)
-        draw.rectangle((x + 5, 3, x + 26, 31), fill=colour)
+        inset = max(3, cell // 7)
+        draw.rectangle((x + inset, inset, x + cell - inset - 1, cell - 1), fill=colour)
     return image
 
 
@@ -108,6 +110,20 @@ class SpritesheetAssistantTests(unittest.TestCase):
         self.assertEqual(len(self.catalog.profile("mob")["groups"]), 6)
         self.assertEqual(len(self.catalog.profile("player")["groups"]), 9)
 
+    def test_auto_detects_sibling_depth_hammer_repository(self) -> None:
+        code_root = self.base / "code"
+        assistant_root = code_root / "depth-hammer-spritesheet-assistant"
+        sprites_root = code_root / "depth-hammer" / "assets" / "entity_sprites" / "default"
+        (sprites_root / "monsters").mkdir(parents=True)
+        (sprites_root / "player").mkdir()
+
+        with patch.object(app, "APP_DIR", assistant_root):
+            resolved, available, source = app.discover_sprites_root()
+
+        self.assertEqual(resolved, sprites_root.resolve())
+        self.assertTrue(available)
+        self.assertEqual(source, "auto-detected")
+
     def test_normalizer_api_accepts_arbitrary_frame_count(self) -> None:
         source = self.base / "three.png"
         output = self.base / "three_out.png"
@@ -147,6 +163,103 @@ class SpritesheetAssistantTests(unittest.TestCase):
         outputs = result["groups"]["walk"]["outputs"]
         self.assertEqual(len(outputs), 4)
         self.assertEqual({(item["width"], item["height"]) for item in outputs}, {(128, 32)})
+
+    def test_new_upload_replaces_pixels_and_preview_version(self) -> None:
+        draft_id = "draft-replace-upload"
+        first_source = Image.new("RGBA", (320, 240), (0, 0, 0, 0))
+        ImageDraw.Draw(first_source).ellipse((55, 20, 265, 230), fill=(210, 55, 70, 255))
+        first = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "base",
+            png_bytes(first_source),
+        )["groups"]["base"]
+        first_output = next(item for item in first["outputs"] if item["width"] == 32)
+        first_bytes = self.manager.processed_file(draft_id, first_output["stored_name"]).read_bytes()
+
+        second_source = Image.new("RGBA", (320, 240), (0, 0, 0, 0))
+        ImageDraw.Draw(second_source).rectangle((40, 35, 280, 220), fill=(40, 125, 220, 255))
+        second = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "base",
+            png_bytes(second_source),
+        )["groups"]["base"]
+        second_output = next(item for item in second["outputs"] if item["width"] == 32)
+
+        self.assertNotEqual(first["raw_version"], second["raw_version"])
+        self.assertNotEqual(first["processed_version"], second["processed_version"])
+        self.assertNotEqual(
+            first_bytes,
+            self.manager.processed_file(draft_id, second_output["stored_name"]).read_bytes(),
+        )
+
+    def test_two_by_two_footprint_outputs_64_pixel_frames(self) -> None:
+        draft_id = "draft-footprint-two"
+        status = self.manager.set_footprint(draft_id, "mob", "2x2")
+        self.assertEqual(status["footprint"], "2x2")
+        self.assertEqual(status["cell_size"], 64)
+
+        source = Image.new("RGBA", (500, 400), (0, 0, 0, 0))
+        ImageDraw.Draw(source).ellipse((70, 20, 430, 390), fill=(95, 145, 205, 255))
+        base = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "base",
+            png_bytes(source),
+        )["groups"]["base"]
+        self.assertEqual(
+            {(item["width"], item["height"]) for item in base["outputs"]},
+            {(64, 64), (256, 256)},
+        )
+
+        walk = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "walk",
+            png_bytes(separated_sheet(16)),
+        )["groups"]["walk"]
+        self.assertEqual(
+            {(item["width"], item["height"]) for item in walk["outputs"]},
+            {(256, 64)},
+        )
+        self.assertTrue(all(item["cell_size"] == 64 for item in (base, walk)))
+
+    def test_changing_footprint_reprocesses_existing_uploads(self) -> None:
+        draft_id = "draft-footprint-change"
+        first = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "walk",
+            png_bytes(separated_sheet(16)),
+        )["groups"]["walk"]
+        old_version = first["processed_version"]
+        self.assertEqual(first["outputs"][0]["height"], 32)
+
+        changed = self.manager.set_footprint(draft_id, "mob", "2×2")
+        updated = changed["groups"]["walk"]
+        self.assertTrue(updated["ready"])
+        self.assertEqual(updated["cell_size"], 64)
+        self.assertEqual(updated["outputs"][0]["height"], 64)
+        self.assertEqual(updated["outputs"][0]["width"], 256)
+        self.assertNotEqual(old_version, updated["processed_version"])
+
+    def test_animation_previews_keep_detected_original_frame_size(self) -> None:
+        draft_id = "draft-original-previews"
+        saved = self.manager.process_upload(
+            draft_id,
+            "mob",
+            "walk",
+            png_bytes(separated_sheet(16)),
+        )["groups"]["walk"]
+
+        previews = saved["original_previews"]
+        self.assertEqual(len(previews), 4)
+        self.assertEqual({(item["width"], item["height"]) for item in previews}, {(160, 40)})
+        self.assertTrue(all(item["width"] // item["frames"] == 40 for item in previews))
+        self.assertTrue(all(item["width"] // item["frames"] > 32 for item in previews))
+        for record in previews:
+            self.assertTrue(self.manager.processed_file(draft_id, record["stored_name"]).is_file())
 
     def test_disconnected_creature_automatically_uses_grid(self) -> None:
         result = self.manager.process_upload(
@@ -339,8 +452,15 @@ class SpritesheetAssistantTests(unittest.TestCase):
         with self.assertRaises(app.AppError):
             self.manager.reprocess(draft_id, "mob", "walk", {"sharpen": 4.1})
 
-    def _make_complete_draft(self, draft_id: str, profile_key: str) -> None:
+    def _make_complete_draft(
+        self,
+        draft_id: str,
+        profile_key: str,
+        footprint: str = "1x1",
+    ) -> None:
         metadata = self.manager.load(draft_id, profile_key)
+        metadata["footprint"] = footprint
+        cell_size = app.footprint_cell_size(footprint)
         processed = self.manager.draft_dir(draft_id) / "processed"
         raw = self.manager.draft_dir(draft_id) / "raw"
         processed.mkdir(parents=True, exist_ok=True)
@@ -353,7 +473,7 @@ class SpritesheetAssistantTests(unittest.TestCase):
                 stored_name = f"{group['id']}__{index}.png"
                 path = processed / stored_name
                 if group["mode"] == "crop_pair":
-                    size = tuple(int(value) for value in spec["size"])
+                    size = app.resolved_crop_output_size(spec, cell_size)
                     image = Image.new("RGBA", size, (0, 0, 0, 0))
                     ImageDraw.Draw(image).rectangle(
                         (max(1, size[0] // 5), max(1, size[1] // 10), size[0] - 2, size[1] - 1),
@@ -363,7 +483,7 @@ class SpritesheetAssistantTests(unittest.TestCase):
                     image = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
                     ImageDraw.Draw(image).rectangle((24, 8, 103, 127), fill=(120, 80, 50, 255))
                 else:
-                    image = finished_strip(int(spec["frames"]))
+                    image = finished_strip(int(spec["frames"]), cell_size)
                 image.save(path)
                 records.append(self.manager._record_output(stored_name, path, spec))
             raw_name = f"{group['id']}.png"
@@ -375,10 +495,22 @@ class SpritesheetAssistantTests(unittest.TestCase):
                 "source_width": 512,
                 "source_height": 512,
                 "raw_name": raw_name,
+                "cell_size": cell_size,
                 "outputs": records,
                 "warnings": [],
             }
         self.manager.save(draft_id, metadata)
+
+    def test_two_by_two_export_validates_64_pixel_assets(self) -> None:
+        draft_id = "draft-export-2x2"
+        self._make_complete_draft(draft_id, "mob", "2x2")
+        result = self.manager.export(draft_id, "mob", "ogre", self.root)
+        self.assertEqual(result["footprint"], "2x2")
+        self.assertEqual(result["cell_size"], 64)
+        with Image.open(self.root / "monsters" / "ogre" / "ogre.png") as image:
+            self.assertEqual(image.size, (64, 64))
+        with Image.open(self.root / "monsters" / "ogre" / "ogre_walk_down.png") as image:
+            self.assertEqual(image.size, (256, 64))
 
     def test_export_is_complete_atomic_and_no_overwrite(self) -> None:
         draft_id = "draft-export-001"
@@ -443,6 +575,24 @@ class SpritesheetAssistantTests(unittest.TestCase):
         self.assertEqual(entity["display_name"], "Bandit")
         self.assertEqual(entity["description"], "Patched leather and a chipped sword.")
         self.assertTrue((self.root / app.LIBRARY_METADATA_FILENAME).is_file())
+
+    def test_existing_library_footprint_persists_and_sets_expected_cell_size(self) -> None:
+        folder = self.root / "monsters" / "ogre"
+        folder.mkdir()
+        finished_strip(4, 64).save(folder / "ogre_walk_down.png")
+        state = app.AppState(self.base / "footprint-state", str(self.root))
+        state.save_library_metadata(
+            "mob",
+            "ogre",
+            "Ogre",
+            "A huge two-tile brute.",
+            "2x2",
+        )
+        entity = next(item for item in state.library_scan()["entities"] if item["name"] == "ogre")
+        self.assertEqual(entity["footprint"], "2x2")
+        self.assertEqual(entity["cell_size"], 64)
+        asset = next(item for item in entity["assets"] if item["name"] == "ogre_walk_down.png")
+        self.assertFalse(any("not 64x64" in warning for warning in asset["warnings"]))
 
     def test_slug_rejects_paths_and_windows_names(self) -> None:
         for value in ("../bandit", "Bandit", "con", "a/b"):

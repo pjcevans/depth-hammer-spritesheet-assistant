@@ -7,7 +7,7 @@
       "plural_label": "Monsters",
       "folder": "monsters",
       "subject": "creature",
-      "notes": "A complete monster export contains 11 animation strips plus its 32x32 base sprite and large examine image.",
+      "notes": "A complete monster export contains 11 animation strips plus its footprint-sized base sprite and large examine image.",
       "groups": [
         {
           "id": "base",
@@ -16,7 +16,7 @@
           "mode": "crop_pair",
           "source_frames": 1,
           "outputs": [
-            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500, "size": [32, 32]},
+            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500, "size": [32, 32], "footprint_scaled": true},
             {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500, "size": [256, 256]}
           ]
         },
@@ -89,7 +89,7 @@
       "plural_label": "Players",
       "folder": "player",
       "subject": "player character",
-      "notes": "A complete player export contains 23 animation strips plus its 32x32 base sprite and large examine image. Godot creates .import files itself.",
+      "notes": "A complete player export contains 23 animation strips plus its footprint-sized base sprite and large examine image. Godot creates .import files itself.",
       "groups": [
         {
           "id": "base",
@@ -98,7 +98,7 @@
           "mode": "crop_pair",
           "source_frames": 1,
           "outputs": [
-            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500, "size": [32, 32]},
+            {"suffix": ".png", "frames": 1, "start": 0, "frame_ms": 500, "size": [32, 32], "footprint_scaled": true},
             {"suffix": "_large.png", "frames": 1, "start": 0, "frame_ms": 500, "size": [256, 256]}
           ]
         },

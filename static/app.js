@@ -71,6 +71,72 @@ function validDraftId(value) {
   return /^[A-Za-z0-9_-]{8,80}$/.test(value || "");
 }
 
+const FOOTPRINT_CELL_SIZES = {
+  "1x1": 32,
+  "2x2": 64,
+};
+
+function normaliseFootprint(value) {
+  const key = String(value || "1x1").toLowerCase().replace("×", "x");
+  return Object.hasOwn(FOOTPRINT_CELL_SIZES, key) ? key : "1x1";
+}
+
+function footprintCellSize(value) {
+  return FOOTPRINT_CELL_SIZES[normaliseFootprint(value)];
+}
+
+function footprintLabel(value) {
+  return normaliseFootprint(value).replace("x", "×");
+}
+
+function createFootprintControl(initialValue = "1x1", onChange = null) {
+  const element = document.createElement("div");
+  element.className = "footprint-field";
+  const title = document.createElement("span");
+  title.className = "footprint-label";
+  title.textContent = "Footprint";
+  const help = document.createElement("span");
+  help.className = "footprint-help";
+  help.textContent = "Controls every generated frame";
+  title.append(document.createElement("br"), help);
+  const toggle = document.createElement("div");
+  toggle.className = "footprint-toggle";
+  toggle.setAttribute("role", "radiogroup");
+  toggle.setAttribute("aria-label", "Sprite footprint");
+  const name = `footprint-${crypto.randomUUID()}`;
+  const inputs = [];
+  Object.entries(FOOTPRINT_CELL_SIZES).forEach(([value, cellSize]) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = name;
+    input.value = value;
+    input.checked = value === normaliseFootprint(initialValue);
+    const text = document.createElement("span");
+    text.textContent = `${footprintLabel(value)} · ${cellSize}px`;
+    label.append(input, text);
+    toggle.append(label);
+    inputs.push(input);
+    if (onChange) input.addEventListener("change", () => {
+      if (input.checked) onChange(value);
+    });
+  });
+  element.append(title, toggle);
+  return {
+    element,
+    get value() {
+      return inputs.find((input) => input.checked)?.value || "1x1";
+    },
+    set value(value) {
+      const normalized = normaliseFootprint(value);
+      inputs.forEach((input) => { input.checked = input.value === normalized; });
+    },
+    set disabled(disabled) {
+      inputs.forEach((input) => { input.disabled = Boolean(disabled); });
+    },
+  };
+}
+
 function safeStoredDraft(profileKey) {
   const key = `dhsa-draft-${profileKey}`;
   let value = localStorage.getItem(key);
@@ -86,6 +152,7 @@ function saveCreatorForm(creator) {
     name: creator.nameInput.value,
     slug: creator.slugInput.value,
     description: creator.descriptionInput.value,
+    footprint: creator.footprintControl.value,
     slugTouched: creator.slugTouched,
   };
   localStorage.setItem(`dhsa-form-${creator.profileKey}`, JSON.stringify(data));
@@ -108,8 +175,13 @@ function mediaUrl(relativePath) {
   return buildUrl("/media", { path: relativePath, token: runToken });
 }
 
-function draftMediaUrl(draftId, storedName) {
-  return buildUrl("/draft-media", { draft: draftId, file: storedName, token: runToken });
+function draftMediaUrl(draftId, storedName, version = "") {
+  return buildUrl("/draft-media", {
+    draft: draftId,
+    file: storedName,
+    version,
+    token: runToken,
+  });
 }
 
 function draftRawUrl(creator, groupId, rawVersion = "") {
@@ -132,6 +204,10 @@ function creatorIdentity(creator) {
   };
 }
 
+function creatorFootprint(creator) {
+  return normaliseFootprint(creator.footprintControl.value);
+}
+
 function scheduleIdentitySave(creator) {
   window.clearTimeout(creator.identitySaveTimer);
   creator.identitySaveTimer = window.setTimeout(() => persistIdentity(creator), 350);
@@ -144,6 +220,44 @@ async function persistIdentity(creator) {
     creator.draftStatus.identity = result.identity;
   } catch (error) {
     toast(`Could not save draft details: ${error.message}`, "error");
+  }
+}
+
+async function persistFootprint(creator, { notify = true } = {}) {
+  const previous = normaliseFootprint(creator.draftStatus.footprint || "1x1");
+  const footprint = creatorFootprint(creator);
+  creator.footprintControl.disabled = true;
+  creator.page.querySelector(".progress-detail").textContent =
+    `Reprocessing uploaded images at ${footprintCellSize(footprint)}×${footprintCellSize(footprint)}…`;
+  try {
+    const result = await api("/api/draft/footprint", {
+      method: "POST",
+      json: {
+        draft: creator.draftId,
+        profile: creator.profileKey,
+        footprint,
+      },
+    });
+    creator.draftStatus = result;
+    creator.footprintControl.value = result.footprint;
+    saveCreatorForm(creator);
+    updateFootprintUI(creator, true);
+    renderCreatorDraft(creator);
+    if (notify) {
+      toast(
+        `${footprintLabel(result.footprint)} footprint selected; game frames are ${result.cell_size}×${result.cell_size}.`,
+      );
+    }
+    return true;
+  } catch (error) {
+    creator.footprintControl.value = previous;
+    saveCreatorForm(creator);
+    updateFootprintUI(creator, true);
+    renderCreatorDraft(creator);
+    toast(`Could not change footprint: ${error.message}`, "error");
+    return false;
+  } finally {
+    creator.footprintControl.disabled = false;
   }
 }
 
@@ -243,39 +357,56 @@ function addSpritePreview(container, asset, url) {
   if (visibilityObserver) visibilityObserver.observe(canvas);
 }
 
-function addSpritePreviewComparison(container, asset, url) {
+function addCreationSpritePreview(
+  container,
+  asset,
+  url,
+  originalAsset,
+  originalUrl,
+  cellSize = 32,
+) {
   const frames = Math.max(1, Number(asset.frames || 1));
   const width = Number(asset.width || asset.frame_width || 32);
   const height = Number(asset.height || asset.frame_height || 32);
   const frameWidth = Number(asset.frame_width || (width % frames === 0 ? width / frames : width));
   const frameHeight = Number(asset.frame_height || height);
-  if (frameWidth !== 32 || frameHeight !== 32) {
+  if (frameWidth !== cellSize || frameHeight !== cellSize) {
     addSpritePreview(container, asset, url);
     return;
   }
 
   container.classList.add("preview-comparison");
-  const enlarged = document.createElement("div");
-  enlarged.className = "preview-stage enlarged";
-  const enlargedLabel = document.createElement("span");
-  enlargedLabel.className = "preview-stage-label";
-  enlargedLabel.textContent = "Enlarged preview";
-  const enlargedMedia = document.createElement("div");
-  enlargedMedia.className = "preview-media";
-  enlarged.append(enlargedMedia, enlargedLabel);
+  const original = document.createElement("div");
+  original.className = "preview-stage original";
+  const originalLabel = document.createElement("span");
+  originalLabel.className = "preview-stage-label";
+  originalLabel.textContent = "Original";
+  const originalMedia = document.createElement("div");
+  originalMedia.className = "preview-media";
+  original.append(originalMedia, originalLabel);
 
   const actual = document.createElement("div");
   actual.className = "preview-stage actual";
   const actualLabel = document.createElement("span");
   actualLabel.className = "preview-stage-label";
-  actualLabel.textContent = "32×32 in game";
+  actualLabel.textContent = `${cellSize}×${cellSize} in game`;
   const actualMedia = document.createElement("div");
   actualMedia.className = "preview-media";
   actual.append(actualMedia, actualLabel);
 
-  container.append(enlarged, actual);
-  addSpritePreview(enlargedMedia, asset, url);
+  container.append(original, actual);
+  addSpritePreview(originalMedia, originalAsset, originalUrl);
   addSpritePreview(actualMedia, asset, url);
+  const actualCanvas = actualMedia.querySelector("canvas");
+  if (actualCanvas) {
+    actualCanvas.style.width = `${cellSize}px`;
+    actualCanvas.style.height = `${cellSize}px`;
+  }
+}
+
+function addLibrarySpritePreview(container, asset, url) {
+  container.classList.add("library-preview");
+  addSpritePreview(container, asset, url);
 }
 
 function setActiveTab(tab) {
@@ -310,10 +441,11 @@ function updateRootDisplay() {
   Object.values(state.creators).forEach(updateCreatorProgress);
 }
 
-function groupExpectation(group) {
+function groupExpectation(group, footprint = "1x1") {
   const outputCount = group.outputs.length;
+  const cellSize = footprintCellSize(footprint);
   if (group.mode === "crop_pair") {
-    return "Upload one image at any size → crop once → 32x32 sprite + 256x256 examine image";
+    return `Upload one image at any size → crop once → ${cellSize}x${cellSize} sprite + 256x256 examine image`;
   }
   if (group.mode === "passthrough") {
     return `Upload one transparent PNG → ${outputCount} examine image`;
@@ -322,12 +454,16 @@ function groupExpectation(group) {
   return `Upload exactly ${group.source_frames} separate sprite${group.source_frames === 1 ? "" : "s"} → ${outputText}`;
 }
 
-function buildPrompt(profile, group, name, description) {
+function buildPrompt(profile, group, name, description, footprint = "1x1") {
   const template = state.templates.templates[group.prompt_key] || "";
+  const cellSize = footprintCellSize(footprint);
   return fillTemplate(template, {
     name: name.trim() || "[name]",
     description: description.trim() || "[description]",
     subject: profile.subject,
+    footprint: footprintLabel(footprint),
+    game_size: `${cellSize}x${cellSize}`,
+    cell_size: String(cellSize),
     style: state.templates.style,
     reference: state.templates.reference,
   });
@@ -689,13 +825,37 @@ function collectProcessingPresets(creator) {
   return presets;
 }
 
+function updateFootprintUI(creator, refreshPrompts = false) {
+  const footprint = creatorFootprint(creator);
+  const cellSize = footprintCellSize(footprint);
+  creator.cards.forEach((view) => {
+    view.card.querySelector(".group-expectation").textContent =
+      groupExpectation(view.group, footprint);
+    if (refreshPrompts) {
+      view.promptArea.value = buildPrompt(
+        creator.profile,
+        view.group,
+        creator.nameInput.value,
+        creator.descriptionInput.value,
+        footprint,
+      );
+    }
+    if (view.group.mode !== "passthrough") {
+      view.card.querySelector(".quality-size").textContent = `${cellSize}×${cellSize}`;
+      view.card.querySelector(".apply-quality").textContent =
+        `Apply ${cellSize}×${cellSize} settings`;
+    }
+  });
+}
+
 function saveDetailsFile(creator) {
   const details = {
-    version: 2,
+    version: 3,
     profile: creator.profileKey,
     name: creator.nameInput.value.trim(),
     slug: creator.slugInput.value.trim(),
     description: creator.descriptionInput.value.trim(),
+    footprint: creatorFootprint(creator),
     processing_presets: collectProcessingPresets(creator),
   };
   const blob = new Blob([`${JSON.stringify(details, null, 2)}\n`], { type: "application/json" });
@@ -721,11 +881,19 @@ async function loadDetailsFile(creator, file) {
     creator.nameInput.value = typeof details.name === "string" ? details.name : "";
     creator.slugInput.value = slugify(typeof details.slug === "string" ? details.slug : creator.nameInput.value);
     creator.descriptionInput.value = typeof details.description === "string" ? details.description : "";
+    creator.footprintControl.value = normaliseFootprint(details.footprint || "1x1");
     creator.slugTouched = true;
     saveCreatorForm(creator);
     await persistIdentity(creator);
+    await persistFootprint(creator, { notify: false });
     creator.cards.forEach(({ group, promptArea }) => {
-      promptArea.value = buildPrompt(creator.profile, group, creator.nameInput.value, creator.descriptionInput.value);
+      promptArea.value = buildPrompt(
+        creator.profile,
+        group,
+        creator.nameInput.value,
+        creator.descriptionInput.value,
+        creatorFootprint(creator),
+      );
     });
     renderCreatorDraft(creator);
     const presets = details.processing_presets && typeof details.processing_presets === "object"
@@ -745,7 +913,7 @@ async function loadDetailsFile(creator, file) {
       }
     });
     toast(Object.keys(presets).length
-      ? "Sprite details and 32×32 processing presets loaded."
+      ? `Sprite details and ${footprintCellSize(creatorFootprint(creator))}×${footprintCellSize(creatorFootprint(creator))} processing presets loaded.`
       : "Sprite details loaded.");
   } catch (error) {
     toast(`Could not load details: ${error.message}`, "error");
@@ -763,16 +931,29 @@ function renderCreation(profileKey) {
   page.querySelector(".creation-eyebrow").textContent = profileKey === "mob" ? "Monster production" : "Player production";
 
   const storedForm = loadCreatorForm(profileKey);
-  const creator = {
+  let creator;
+  const footprintControl = createFootprintControl(
+    storedForm.footprint || "1x1",
+    () => persistFootprint(creator),
+  );
+  page.querySelector(".footprint-host").append(footprintControl.element);
+  creator = {
     profileKey,
     profile,
     page,
     draftId: safeStoredDraft(profileKey),
-    draftStatus: { groups: {}, missing_groups: profile.groups.map((group) => group.id), ready: false },
+    draftStatus: {
+      groups: {},
+      missing_groups: profile.groups.map((group) => group.id),
+      footprint: footprintControl.value,
+      cell_size: footprintCellSize(footprintControl.value),
+      ready: false,
+    },
     cards: new Map(),
     nameInput: page.querySelector(".character-name"),
     slugInput: page.querySelector(".folder-slug"),
     descriptionInput: page.querySelector(".character-description"),
+    footprintControl,
     slugTouched: Boolean(storedForm.slugTouched),
     identitySaveTimer: null,
   };
@@ -789,9 +970,18 @@ function renderCreation(profileKey) {
     card.dataset.group = group.id;
     card.querySelector(".group-number").textContent = `Upload ${index + 1} of ${profile.groups.length}`;
     card.querySelector(".group-label").textContent = group.label;
-    card.querySelector(".group-expectation").textContent = groupExpectation(group);
+    card.querySelector(".group-expectation").textContent = groupExpectation(
+      group,
+      creatorFootprint(creator),
+    );
     const promptArea = card.querySelector(".generated-prompt");
-    promptArea.value = buildPrompt(profile, group, creator.nameInput.value, creator.descriptionInput.value);
+    promptArea.value = buildPrompt(
+      profile,
+      group,
+      creator.nameInput.value,
+      creator.descriptionInput.value,
+      creatorFootprint(creator),
+    );
     card.querySelector(".copy-prompt").addEventListener("click", () => copyText(promptArea.value));
     const input = card.querySelector(".group-upload");
     const isCrop = group.mode === "crop_pair";
@@ -853,6 +1043,7 @@ function renderCreation(profileKey) {
     if (file) loadDetailsFile(creator, file);
     loadInput.value = "";
   });
+  updateFootprintUI(creator);
   updateCreatorProgress(creator);
 }
 
@@ -864,7 +1055,13 @@ function generateCreatorPrompts(creator) {
     return;
   }
   creator.cards.forEach(({ group, promptArea }) => {
-    promptArea.value = buildPrompt(creator.profile, group, name, description);
+    promptArea.value = buildPrompt(
+      creator.profile,
+      group,
+      name,
+      description,
+      creatorFootprint(creator),
+    );
   });
   saveCreatorForm(creator);
   scheduleIdentitySave(creator);
@@ -889,6 +1086,7 @@ async function loadCreatorDraft(creator, notify = true) {
   try {
     const result = await api(buildUrl("/api/draft", { draft: creator.draftId, profile: creator.profileKey }));
     creator.draftStatus = result;
+    creator.footprintControl.value = result.footprint || "1x1";
     const identity = result.identity || {};
     if (identity.name || identity.slug || identity.description) {
       creator.nameInput.value = identity.name || "";
@@ -902,9 +1100,12 @@ async function loadCreatorDraft(creator, notify = true) {
           group,
           creator.nameInput.value,
           creator.descriptionInput.value,
+          creatorFootprint(creator),
         );
       });
     }
+    updateFootprintUI(creator, true);
+    saveCreatorForm(creator);
     renderCreatorDraft(creator);
   } catch (error) {
     if (notify) toast(`Could not load ${creator.profile.label.toLowerCase()} draft: ${error.message}`, "error");
@@ -953,6 +1154,7 @@ async function uploadGroup(creator, group, file) {
 
 function renderCreatorDraft(creator) {
   const savedGroups = creator.draftStatus.groups || {};
+  const selectedCellSize = footprintCellSize(creatorFootprint(creator));
   creator.cards.forEach((view, groupId) => {
     const saved = savedGroups[groupId];
     const badge = view.card.querySelector(".completion-badge");
@@ -972,7 +1174,7 @@ function renderCreatorDraft(creator) {
           drawCropPreview(view);
         }
         view.card.querySelector(".crop-status").textContent = saved.ready
-          ? "Crop applied. Both the 32x32 sprite and 256x256 examine asset are shown below."
+          ? `Crop applied. Both the ${selectedCellSize}x${selectedCellSize} sprite and 256x256 examine asset are shown below.`
           : "Adjust the crop and choose Apply crop to try again.";
       }
     } else if (view.group.mode !== "passthrough") {
@@ -1013,16 +1215,46 @@ function renderCreatorDraft(creator) {
       const warningText = (saved.warnings || []).join(" ");
       const method = saved.processing_method ? ` · ${saved.processing_method}` : "";
       message.textContent = `Source ${saved.source_width}x${saved.source_height} processed successfully${method}.${warningText ? ` ${warningText}` : ""}`;
-      saved.outputs.forEach((record) => {
+      saved.outputs.forEach((record, index) => {
         const item = document.createElement("div");
         item.className = "processed-item";
         const preview = document.createElement("div");
         preview.className = "asset-preview";
         const finalName = `${creator.slugInput.value || "name"}${record.suffix}`;
-        addSpritePreviewComparison(
+        const originalRecord = (saved.original_previews || [])[index];
+        const originalAsset = originalRecord
+          ? {
+              ...originalRecord,
+              name: `${view.group.label} original`,
+              frame_width: originalRecord.width / originalRecord.frames,
+              frame_height: originalRecord.height,
+            }
+          : {
+              name: `${view.group.label} original upload`,
+              frames: 1,
+              width: saved.source_width,
+              height: saved.source_height,
+              frame_width: saved.source_width,
+              frame_height: saved.source_height,
+            };
+        const originalUrl = originalRecord
+          ? draftMediaUrl(
+              creator.draftId,
+              originalRecord.stored_name,
+              saved.processed_version || saved.raw_version || "",
+            )
+          : draftRawUrl(creator, view.group.id, saved.raw_version || "");
+        addCreationSpritePreview(
           preview,
           { ...record, name: finalName, frame_width: record.width / record.frames, frame_height: record.height },
-          draftMediaUrl(creator.draftId, record.stored_name),
+          draftMediaUrl(
+            creator.draftId,
+            record.stored_name,
+            saved.processed_version || saved.raw_version || "",
+          ),
+          originalAsset,
+          originalUrl,
+          Number(saved.cell_size || selectedCellSize),
         );
         const name = document.createElement("div");
         name.className = "processed-name";
@@ -1074,7 +1306,9 @@ function updateCreatorProgress(creator) {
   } else if (readyCount !== total) {
     summary.textContent = `Upload every required image to unlock export (${readyCount}/${total} groups ready).`;
   } else {
-    summary.textContent = `Ready to create ${creator.profile.folder}\\${creator.slugInput.value} after one final validation pass.`;
+    const cellSize = footprintCellSize(creatorFootprint(creator));
+    summary.textContent =
+      `Ready to create ${creator.profile.folder}\\${creator.slugInput.value} with ${cellSize}×${cellSize} frames after one final validation pass.`;
   }
 }
 
@@ -1088,11 +1322,21 @@ async function resetCreatorDraft(creator) {
   }
   creator.draftId = newDraftId();
   localStorage.setItem(`dhsa-draft-${creator.profileKey}`, creator.draftId);
+  creator.footprintControl.value = "1x1";
+  saveCreatorForm(creator);
   creator.page.querySelector(".draft-id").textContent = `Draft ${creator.draftId}`;
-  creator.draftStatus = { groups: {}, missing_groups: creator.profile.groups.map((group) => group.id), ready: false };
+  creator.draftStatus = {
+    groups: {},
+    missing_groups: creator.profile.groups.map((group) => group.id),
+    footprint: "1x1",
+    cell_size: 32,
+    ready: false,
+  };
   creator.page.querySelector(".export-result").classList.add("hidden");
+  updateFootprintUI(creator, true);
   renderCreatorDraft(creator);
-  persistIdentity(creator);
+  await persistIdentity(creator);
+  await persistFootprint(creator, { notify: false });
   toast("Fresh draft started.");
 }
 
@@ -1215,7 +1459,9 @@ function renderLibraryDetail(entity) {
   const heading = document.createElement("h3");
   heading.textContent = entity.display_name || entity.name;
   const path = document.createElement("p");
-  path.textContent = `${entity.relative_path} · ${entity.asset_count} PNG${entity.asset_count === 1 ? "" : "s"}`;
+  path.textContent =
+    `${entity.relative_path} · ${entity.asset_count} PNG${entity.asset_count === 1 ? "" : "s"} · `
+    + `${footprintLabel(entity.footprint)} footprint`;
   header.append(heading, path);
   detail.append(header);
   const metadata = document.createElement("div");
@@ -1238,14 +1484,15 @@ function renderLibraryDetail(entity) {
   descriptionInput.value = entity.description || "";
   descriptionInput.placeholder = "No description saved yet — add one here for future prompt generation.";
   descriptionLabel.append(descriptionTitle, descriptionInput);
+  const footprintControl = createFootprintControl(entity.footprint || "1x1");
   const save = document.createElement("button");
   save.className = "button primary";
   save.textContent = "Save details";
   const note = document.createElement("p");
   note.className = "metadata-note";
   note.textContent = entity.metadata_present
-    ? "Saved with the Sprite Library and editable at any time."
-    : "This folder has no saved description yet. Add one now and it will appear on future library scans.";
+    ? "Name, description and footprint are saved with this set and editable at any time."
+    : "This folder defaults to a 1×1 footprint. Add its description or change its footprint for future scans.";
   save.addEventListener("click", async () => {
     save.disabled = true;
     save.textContent = "Saving…";
@@ -1257,13 +1504,20 @@ function renderLibraryDetail(entity) {
           folder: entity.folder || entity.name,
           name: nameInput.value,
           description: descriptionInput.value,
+          footprint: footprintControl.value,
         },
       });
       entity.display_name = nameInput.value.trim() || entity.name;
       entity.description = descriptionInput.value.trim();
-      entity.metadata_present = Boolean(nameInput.value.trim() || descriptionInput.value.trim());
+      entity.footprint = footprintControl.value;
+      entity.cell_size = footprintCellSize(entity.footprint);
+      entity.metadata_present = Boolean(
+        nameInput.value.trim()
+        || descriptionInput.value.trim()
+        || entity.footprint !== "1x1"
+      );
       toast(`Details saved for ${entity.display_name}.`);
-      renderEntityList();
+      await loadLibrary();
     } catch (error) {
       toast(error.message, "error");
     } finally {
@@ -1271,7 +1525,7 @@ function renderLibraryDetail(entity) {
       save.textContent = "Save details";
     }
   });
-  metadata.append(nameLabel, descriptionLabel, save, note);
+  metadata.append(nameLabel, descriptionLabel, footprintControl.element, save, note);
   detail.append(metadata);
   const grid = document.createElement("div");
   grid.className = "asset-grid";
@@ -1286,7 +1540,7 @@ function renderLibraryDetail(entity) {
     if (asset.error) {
       preview.textContent = asset.error;
     } else {
-      addSpritePreviewComparison(preview, asset, mediaUrl(asset.relative_path));
+      addLibrarySpritePreview(preview, asset, mediaUrl(asset.relative_path));
     }
     const meta = document.createElement("div");
     meta.className = "asset-meta";

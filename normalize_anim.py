@@ -1209,7 +1209,7 @@ def normalize_uploaded_sheet(
     output_path: Path,
     *,
     frames: int,
-    cell: int = 32,
+    cell: int | str = 32,
     config_overrides: Optional[dict[str, Any]] = None,
 ) -> Path:
     """Normalize one uploaded sheet without imposing a mob/player file count.

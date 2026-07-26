@@ -4,36 +4,38 @@ A local browser interface backed by Python. It browses existing player and monst
 
 ## Install and run on Windows
 
-1. Extract the complete `depth-hammer-spritesheet-assistant` folder inside `depth-hammer\assets`.
+1. Extract the complete `depth-hammer-spritesheet-assistant` folder beside the `depth-hammer` repository.
 2. Double-click `run_spritesheet_assistant.bat`.
 3. The first run creates a private `.venv` and installs Pillow and NumPy. Later runs start immediately.
 4. Chrome opens automatically. Keep the launcher window open while using the app.
 
-The expected layout is:
+The recommended layout is:
 
 ```text
-depth-hammer\assets\
-├─ entity_sprites\default\
-│  ├─ monsters\
-│  └─ player\
+C:\code\
+├─ depth-hammer\
+│  └─ assets\entity_sprites\default\
+│     ├─ monsters\
+│     └─ player\
 └─ depth-hammer-spritesheet-assistant\
    ├─ run_spritesheet_assistant.bat
    └─ source_assets\
 ```
 
-If the app is stored elsewhere, open **Settings** and enter the absolute path to `depth-hammer\assets\entity_sprites\default`.
+The app automatically finds the sibling `depth-hammer` repository. If either folder has a different name or location, open **Settings** and enter the absolute path to `depth-hammer\assets\entity_sprites\default`.
 
 ## Creation workflow
 
 1. Open **New Monster** or **New Player**.
 2. Enter the name, lowercase folder prefix and visual description.
-3. Optionally choose **Save details file** to keep a portable JSON copy of the name, folder, description, crop, detection choices and 32×32 processing presets. **Load details file** restores them later. The live draft is also saved automatically.
-4. Generate the prompts and copy each prompt into your image-generation conversation. Use the same base reference image for every animation prompt.
-5. Upload one PNG, JPEG or WebP source artwork image. Drag, scale and position it in the crop tool; one crop produces the 256×256 `_large` image and the 32×32 base sprite.
-6. Open **32×32 output controls** to choose a quick preset or directly adjust the downscale filter, pre-shrink blur, sharpness, palette size, alpha-aware resizing and edge cleanup. The same controls are available for every animation upload.
-7. Upload the returned PNG for each animation group. The normaliser runs immediately and shows both an enlarged inspection view and a true 32×32 in-game preview of every final frame.
-8. Resolve any remaining frame-count or transparency errors. Open **Sprite detection controls** to adjust the grid, alpha threshold, component area or row tolerance and reprocess the original upload without uploading it again.
-9. Choose **Export to folder**. The game-ready files go to `entity_sprites\default`, and the untouched full-size uploads go to `depth-hammer-spritesheet-assistant\source_assets\<folder-name>`.
+3. Choose a **Footprint**: 1×1 produces 32×32 frames and 2×2 produces 64×64 frames. The choice is saved with the draft and can be changed later; existing uploads are reprocessed automatically.
+4. Optionally choose **Save details file** to keep a portable JSON copy of the name, folder, description, footprint, crop, detection choices and processing presets. **Load details file** restores them later. The live draft is also saved automatically.
+5. Generate the prompts and copy each prompt into your image-generation conversation. Use the same base reference image for every animation prompt.
+6. Upload one PNG, JPEG or WebP source artwork image. Drag, scale and position it in the crop tool; one crop produces the 256×256 `_large` image and the footprint-sized base sprite.
+7. Open the size-labelled **output controls** to choose a quick preset or directly adjust the downscale filter, pre-shrink blur, sharpness, palette size, alpha-aware resizing and edge cleanup. The same controls are available for every animation upload.
+8. Upload the returned PNG for each animation group. The normaliser runs immediately and shows a large original-resolution frame beside the true-size 32×32 or 64×64 in-game result. Uploading a replacement uses a new preview version, so stale browser-cached artwork is not shown. Existing Sprite Library assets are shown once at their actual stored size.
+9. Resolve any remaining frame-count or transparency errors. Open **Sprite detection controls** to adjust the grid, alpha threshold, component area or row tolerance and reprocess the original upload without uploading it again.
+10. Choose **Export to folder**. The game-ready files go to the sibling repository's `depth-hammer\assets\entity_sprites\default`, and the untouched full-size uploads stay local to the app in `depth-hammer-spritesheet-assistant\source_assets\<folder-name>`.
 
 Combined directional sheets are expected in this order:
 
@@ -45,7 +47,7 @@ A 16-sprite directional upload becomes four 4-frame Godot strips. Eight-frame de
 
 ## Sprite Library details
 
-Every existing player and monster folder has editable **Name** and **Description** fields in the Sprite Library. New exports populate them automatically. Older folders show empty description fields ready to fill in. These details are stored in `entity_sprites\default\sprite_library_metadata.json`, outside the assistant folder, so replacing or updating the app does not discard them.
+Every existing player and monster folder has editable **Name**, **Description** and **Footprint** fields in the Sprite Library. New exports populate them automatically. Older folders show empty description fields and default to 1×1 until changed. Changing an existing set's footprint updates its metadata and validation expectations; it does not rewrite exported artwork. These details are stored in `entity_sprites\default\sprite_library_metadata.json`, outside the assistant folder, so replacing or updating the app does not discard them.
 
 ## Export safety
 
@@ -53,7 +55,7 @@ Every existing player and monster folder has editable **Name** and **Description
 - Player exports contain 25 PNGs: base, large, and 23 animation strips.
 - Every export also keeps one full-resolution PNG per upload group in `source_assets\<folder-name>`, using names such as `bandit.png`, `bandit_walk.png` and `bandit_death.png`.
 - Every processed animation frame must be present, readable and use real transparency. The crop tool warns, but does not block, when source artwork is fully opaque.
-- Final animation cells are exactly 32×32.
+- Final animation cells are exactly 32×32 for 1×1 sets or 64×64 for 2×2 sets.
 - The destination folder must not already exist, including a case-only name match.
 - Files are staged and verified before the destination folder becomes visible.
 - Existing folders are never merged, replaced or partially updated.
@@ -70,7 +72,7 @@ The normaliser settings are in `mob_anim_batch.json`. The supplied defaults reta
 
 ## Drafts
 
-Uploads, crop settings, detection settings, 32×32 quality presets, name, folder and description are kept under `workspace\drafts`. This directory, `.venv` and `source_assets` are ignored by Git. **Start fresh draft** removes only that draft's temporary files; it never touches exported game or full-size source assets.
+Uploads, crop settings, detection settings, quality presets, name, folder, description and footprint are kept under `workspace\drafts`. This directory, `.venv` and `source_assets` are ignored by Git. **Start fresh draft** removes only that draft's temporary files; it never touches exported game or full-size source assets.
 
 ## Troubleshooting
 

@@ -38,7 +38,7 @@ from normalize_anim import (
 )
 
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.1"
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 CONFIG_DIR = APP_DIR / "config"
@@ -57,6 +57,10 @@ WINDOWS_RESERVED = {
     "con", "prn", "aux", "nul",
     *(f"com{i}" for i in range(1, 10)),
     *(f"lpt{i}" for i in range(1, 10)),
+}
+FOOTPRINT_SIZES = {
+    "1x1": 32,
+    "2x2": 64,
 }
 
 Image.MAX_IMAGE_PIXELS = 80_000_000
@@ -132,6 +136,26 @@ def validate_draft_id(value: str) -> str:
     return value
 
 
+def validate_footprint(value: Any) -> str:
+    if not isinstance(value, str):
+        raise AppError("Footprint must be 1x1 or 2x2.")
+    normalized = value.strip().lower().replace("×", "x")
+    if normalized not in FOOTPRINT_SIZES:
+        raise AppError("Footprint must be 1x1 or 2x2.")
+    return normalized
+
+
+def footprint_cell_size(value: Any) -> int:
+    return FOOTPRINT_SIZES[validate_footprint(value)]
+
+
+def resolved_crop_output_size(spec: dict[str, Any], cell_size: int) -> tuple[int, int]:
+    size = spec.get("size", [cell_size, cell_size])
+    if bool(spec.get("footprint_scaled", False)):
+        return cell_size, cell_size
+    return int(size[0]), int(size[1])
+
+
 def unique_paths(paths: list[Path]) -> list[Path]:
     result: list[Path] = []
     seen: set[str] = set()
@@ -152,6 +176,10 @@ def discover_sprites_root(configured: str = "") -> tuple[Path, bool, str]:
         return resolved, valid, "configured"
 
     candidates = [
+        # Recommended layout:
+        # C:\code\depth-hammer-spritesheet-assistant
+        # C:\code\depth-hammer\assets\entity_sprites\default
+        APP_DIR.parent / "depth-hammer" / "assets" / "entity_sprites" / "default",
         APP_DIR / "entity_sprites" / "default",
         APP_DIR.parent / "entity_sprites" / "default",
         APP_DIR.parent.parent / "assets" / "entity_sprites" / "default",
@@ -296,14 +324,18 @@ def reverse_strip_frames(strip: Image.Image, frames: int, cell: int = 32) -> Ima
     return reversed_strip
 
 
-def validate_finished_png(path: Path, spec: dict[str, Any], group: dict[str, Any]) -> list[str]:
+def validate_finished_png(
+    path: Path,
+    spec: dict[str, Any],
+    group: dict[str, Any],
+    cell_size: int = 32,
+) -> list[str]:
     warnings: list[str] = []
     with Image.open(path) as source:
         image = source.convert("RGBA")
     frames = int(spec["frames"])
     if group["mode"] == "crop_pair":
-        size = spec.get("size", [32, 32])
-        expected = (int(size[0]), int(size[1]))
+        expected = resolved_crop_output_size(spec, cell_size)
         if image.size != expected:
             raise AppError(f"{path.name} is {image.width}x{image.height}; expected {expected[0]}x{expected[1]}.")
         if image.getchannel("A").getbbox() is None:
@@ -315,12 +347,14 @@ def validate_finished_png(path: Path, spec: dict[str, Any], group: dict[str, Any
                 f"{path.name} is {image.width}x{image.height}; it must be at least {minimum[0]}x{minimum[1]}."
             )
     else:
-        expected = (frames * 32, 32)
+        expected = (frames * cell_size, cell_size)
         if image.size != expected:
             raise AppError(f"{path.name} is {image.width}x{image.height}; expected {expected[0]}x{expected[1]}.")
         hashes: list[bytes] = []
         for index in range(frames):
-            frame = image.crop((index * 32, 0, (index + 1) * 32, 32))
+            frame = image.crop(
+                (index * cell_size, 0, (index + 1) * cell_size, cell_size)
+            )
             if frame.getchannel("A").getbbox() is None:
                 raise AppError(f"{path.name} has an empty frame at position {index + 1}.")
             hashes.append(frame.tobytes())
@@ -377,11 +411,12 @@ class DraftManager:
             raise AppError("Draft not found.", 404)
         self.catalog.profile(profile_key)
         return {
-            "version": 1,
+            "version": 2,
             "draft_id": draft_id,
             "profile": profile_key,
             "created_at": int(time.time()),
             "updated_at": int(time.time()),
+            "footprint": "1x1",
             "identity": {"name": "", "slug": "", "description": ""},
             "groups": {},
         }
@@ -406,6 +441,31 @@ class DraftManager:
             metadata = self.load(draft_id, profile_key)
             metadata["identity"] = {"name": name, "slug": slug, "description": description}
             self.save(draft_id, metadata)
+            return self.status(draft_id, profile_key)
+
+    def set_footprint(self, draft_id: str, profile_key: str, footprint: Any) -> dict[str, Any]:
+        footprint = validate_footprint(footprint)
+        with self._lock:
+            metadata = self.load(draft_id, profile_key)
+            previous = validate_footprint(metadata.get("footprint", "1x1"))
+            metadata["footprint"] = footprint
+            metadata["version"] = 2
+            self.save(draft_id, metadata)
+            if previous == footprint:
+                return self.status(draft_id, profile_key)
+
+            uploaded_groups = [
+                group["id"]
+                for group in self.catalog.profile(profile_key)["groups"]
+                if metadata.get("groups", {}).get(group["id"], {}).get("raw_name")
+            ]
+            # Each group records its own processing error, so one unusual sheet
+            # cannot prevent the remaining uploads from being resized.
+            for group_id in uploaded_groups:
+                try:
+                    self._process_existing(draft_id, profile_key, str(group_id))
+                except AppError:
+                    continue
             return self.status(draft_id, profile_key)
 
     def _inspect_upload(self, data: bytes, *, require_png: bool = True) -> tuple[int, int]:
@@ -585,10 +645,11 @@ class DraftManager:
 
     @staticmethod
     def _clear_previous_outputs(saved: dict[str, Any], output_dir: Path) -> None:
-        for old_output in saved.get("outputs", []):
-            candidate = output_dir / str(old_output.get("stored_name", ""))
-            if candidate.is_file() and is_within(candidate, output_dir):
-                candidate.unlink()
+        for record_key in ("outputs", "original_previews"):
+            for old_output in saved.get(record_key, []):
+                candidate = output_dir / str(old_output.get("stored_name", ""))
+                if candidate.is_file() and is_within(candidate, output_dir):
+                    candidate.unlink()
 
     def process_upload(
         self,
@@ -603,6 +664,7 @@ class DraftManager:
         source_width, source_height = self._inspect_upload(data, require_png=not crop_mode)
         with self._lock:
             metadata = self.load(draft_id, profile_key)
+            cell_size = footprint_cell_size(metadata.get("footprint", "1x1"))
             draft_dir = self.draft_dir(draft_id)
             raw_dir = draft_dir / "raw"
             output_dir = draft_dir / "processed"
@@ -627,6 +689,7 @@ class DraftManager:
                 "source_height": source_height,
                 "raw_name": raw_path.name,
                 "raw_version": uuid.uuid4().hex,
+                "cell_size": cell_size,
                 "outputs": [],
                 "warnings": [],
             }
@@ -675,6 +738,7 @@ class DraftManager:
         group: dict[str, Any],
         crop: dict[str, Any],
         quality: dict[str, Any],
+        cell_size: int,
     ) -> tuple[list[dict[str, Any]], list[str], list[int]]:
         with Image.open(raw_path) as source_file:
             source = source_file.convert("RGBA")
@@ -696,7 +760,7 @@ class DraftManager:
         records: list[dict[str, Any]] = []
         warnings: list[str] = []
         for index, spec in enumerate(group["outputs"]):
-            size = (int(spec["size"][0]), int(spec["size"][1]))
+            size = resolved_crop_output_size(spec, cell_size)
             image = (
                 canvas.copy()
                 if size == large_size
@@ -705,7 +769,7 @@ class DraftManager:
             stored_name = f"{group_id}__{index}.png"
             output_path = output_dir / stored_name
             image.save(output_path, optimize=True)
-            warnings.extend(validate_finished_png(output_path, spec, group))
+            warnings.extend(validate_finished_png(output_path, spec, group, cell_size))
             records.append(self._record_output(stored_name, output_path, spec))
         return records, warnings, list(bbox)
 
@@ -800,6 +864,7 @@ class DraftManager:
         group: dict[str, Any],
         settings: dict[str, Any],
         quality: dict[str, Any],
+        cell_size: int,
     ) -> tuple[str, str]:
         common = {
             **self.normalizer_defaults,
@@ -814,7 +879,7 @@ class DraftManager:
                 raw_path,
                 temporary_strip,
                 frames=int(group["source_frames"]),
-                cell=32,
+                cell=cell_size,
                 config_overrides={
                     **common,
                     "source_cols": settings["columns"],
@@ -840,7 +905,11 @@ class DraftManager:
                 except NormalizationError as grid_error:
                     grid_errors.append(f"{columns}×{rows}: {grid_error}")
                     continue
-                if self._strip_has_all_frames(temporary_strip, int(group["source_frames"])):
+                if self._strip_has_all_frames(
+                    temporary_strip,
+                    int(group["source_frames"]),
+                    cell_size,
+                ):
                     return ("grid_auto", f"{columns}×{rows}"), grid_errors
                 grid_errors.append(f"{columns}×{rows}: one or more empty cells")
             return None, grid_errors
@@ -861,7 +930,7 @@ class DraftManager:
                 raw_path,
                 temporary_strip,
                 frames=int(group["source_frames"]),
-                cell=32,
+                cell=cell_size,
                 config_overrides={**common, "source_cols": None, "source_rows": None},
             )
             return "blobs", "Connected sprite detection"
@@ -879,9 +948,82 @@ class DraftManager:
                 f"{group['source_frames']} complete frames. Tried {detail}."
             )
 
+    def _render_original_animation_previews(
+        self,
+        raw_path: Path,
+        temporary_strip: Path,
+        output_dir: Path,
+        group_id: str,
+        group: dict[str, Any],
+        settings: dict[str, Any],
+        detection_method: str,
+    ) -> list[dict[str, Any]]:
+        """Build animated previews from the detected source frames without shrinking them to 32px."""
+
+        use_grid = detection_method in {"grid", "grid_auto"}
+        normalize_uploaded_sheet(
+            raw_path,
+            temporary_strip,
+            frames=int(group["source_frames"]),
+            cell="auto",
+            config_overrides={
+                **self.normalizer_defaults,
+                "source_cols": int(settings["columns"]) if use_grid else None,
+                "source_rows": int(settings["rows"]) if use_grid else None,
+                "alpha_threshold": int(settings["alpha_threshold"]),
+                "min_blob_area": int(settings["min_blob_area"]),
+                "row_tolerance": int(settings["row_tolerance"]),
+                # These previews preserve the detected source artwork. The
+                # 32x32 quality controls apply only to the game output.
+                "quality_mode": "nearest",
+                "downscale_filter": "nearest",
+                "alpha_aware": False,
+                "gamma_correct": False,
+                "preblur": 0,
+                "sharpen": 1,
+                "quantize": False,
+                "alpha_cleanup": False,
+                "hard_alpha": False,
+                "despeckle": False,
+                "fit_padding": 0,
+            },
+        )
+        with Image.open(temporary_strip) as source:
+            strip = source.convert("RGBA")
+        cell = strip.height
+        expected_width = int(group["source_frames"]) * cell
+        if cell < 1 or strip.width != expected_width:
+            raise AppError(
+                f"Original preview strip is {strip.width}x{strip.height}; "
+                f"expected {expected_width}x{cell}.",
+                500,
+            )
+
+        records: list[dict[str, Any]] = []
+        created: list[Path] = []
+        try:
+            for index, spec in enumerate(group["outputs"]):
+                start = int(spec["start"])
+                frames = int(spec["frames"])
+                preview = strip.crop((start * cell, 0, (start + frames) * cell, cell))
+                if bool(spec.get("reverse", False)):
+                    preview = reverse_strip_frames(preview, frames, cell)
+                stored_name = f"{group_id}__original__{index}.png"
+                output_path = output_dir / stored_name
+                preview.save(output_path, optimize=True)
+                created.append(output_path)
+                records.append(self._record_output(stored_name, output_path, spec))
+            return records
+        except Exception:
+            for path in created:
+                path.unlink(missing_ok=True)
+            raise
+
     def _process_existing(self, draft_id: str, profile_key: str, group_id: str) -> dict[str, Any]:
         group = self.catalog.group(profile_key, group_id)
         metadata = self.load(draft_id, profile_key)
+        footprint = validate_footprint(metadata.get("footprint", "1x1"))
+        cell_size = footprint_cell_size(footprint)
         saved = metadata.get("groups", {}).get(group_id)
         if not saved or not saved.get("raw_name"):
             raise AppError("The original upload is missing.")
@@ -893,11 +1035,15 @@ class DraftManager:
         output_dir.mkdir(parents=True, exist_ok=True)
         self._clear_previous_outputs(saved, output_dir)
         saved["outputs"] = []
+        saved["original_previews"] = []
         saved["warnings"] = []
+        saved["processed_version"] = uuid.uuid4().hex
+        saved["cell_size"] = cell_size
         saved.pop("error", None)
         saved.pop("processing_method", None)
         saved.pop("detection_method", None)
         temporary_strip = output_dir / f".{group_id}.{uuid.uuid4().hex}.strip.png"
+        temporary_original_strip = output_dir / f".{group_id}.{uuid.uuid4().hex}.original-strip.png"
         try:
             if group["mode"] == "crop_pair":
                 records, warnings, bbox = self._render_crop_pair(
@@ -907,6 +1053,7 @@ class DraftManager:
                     group,
                     saved.get("crop", self._crop_settings(None)),
                     saved.get("quality", self._quality_settings(None)),
+                    cell_size,
                 )
                 saved["crop_bbox"] = bbox
                 saved["processing_method"] = "Interactive crop"
@@ -919,7 +1066,7 @@ class DraftManager:
                     stored_name = f"{group_id}__{index}.png"
                     output_path = output_dir / stored_name
                     image.save(output_path, optimize=True)
-                    warnings.extend(validate_finished_png(output_path, spec, group))
+                    warnings.extend(validate_finished_png(output_path, spec, group, cell_size))
                     records.append(self._record_output(stored_name, output_path, spec))
             else:
                 method, method_label = self._run_normalizer(
@@ -928,31 +1075,58 @@ class DraftManager:
                     group,
                     saved.get("settings", self._detection_settings(group, None, 1, 1)),
                     saved.get("quality", self._quality_settings(None)),
+                    cell_size,
                 )
                 saved["detection_method"] = method
                 saved["processing_method"] = method_label
+                original_previews = []
+                preview_warnings: list[str] = []
+                try:
+                    original_previews = self._render_original_animation_previews(
+                        raw_path,
+                        temporary_original_strip,
+                        output_dir,
+                        group_id,
+                        group,
+                        saved.get("settings", self._detection_settings(group, None, 1, 1)),
+                        method,
+                    )
+                except Exception as preview_error:
+                    preview_warnings.append(
+                        f"Could not build animated original previews ({preview_error}); "
+                        "the untouched source upload will be shown instead."
+                    )
                 with Image.open(temporary_strip) as source:
                     strip = source.convert("RGBA")
-                expected_size = (int(group["source_frames"]) * 32, 32)
+                expected_size = (int(group["source_frames"]) * cell_size, cell_size)
                 if strip.size != expected_size:
                     raise AppError(
                         f"Normalizer produced {strip.width}x{strip.height}; expected {expected_size[0]}x{expected_size[1]}."
                     )
                 records = []
-                warnings = []
+                warnings = preview_warnings
                 for index, spec in enumerate(group["outputs"]):
                     start = int(spec["start"])
                     frames = int(spec["frames"])
-                    output = strip.crop((start * 32, 0, (start + frames) * 32, 32))
+                    output = strip.crop(
+                        (
+                            start * cell_size,
+                            0,
+                            (start + frames) * cell_size,
+                            cell_size,
+                        )
+                    )
                     if bool(spec.get("reverse", False)):
-                        output = reverse_strip_frames(output, frames)
+                        output = reverse_strip_frames(output, frames, cell_size)
                     stored_name = f"{group_id}__{index}.png"
                     output_path = output_dir / stored_name
                     output.save(output_path, optimize=True)
-                    warnings.extend(validate_finished_png(output_path, spec, group))
+                    warnings.extend(validate_finished_png(output_path, spec, group, cell_size))
                     records.append(self._record_output(stored_name, output_path, spec))
             saved["ready"] = True
             saved["outputs"] = records
+            if group["mode"] not in {"crop_pair", "passthrough"}:
+                saved["original_previews"] = original_previews
             saved["warnings"] = sorted(set(warnings))
             self.save(draft_id, metadata)
             return self.status(draft_id, profile_key)
@@ -964,6 +1138,7 @@ class DraftManager:
             saved["ready"] = False
             saved["error"] = message
             saved["outputs"] = []
+            saved["original_previews"] = []
             self.save(draft_id, metadata)
             if isinstance(exc, AppError):
                 raise
@@ -972,6 +1147,7 @@ class DraftManager:
             raise AppError(message, 500) from exc
         finally:
             temporary_strip.unlink(missing_ok=True)
+            temporary_original_strip.unlink(missing_ok=True)
 
     @staticmethod
     def _record_output(stored_name: str, path: Path, spec: dict[str, Any]) -> dict[str, Any]:
@@ -988,11 +1164,14 @@ class DraftManager:
     def status(self, draft_id: str, profile_key: str) -> dict[str, Any]:
         metadata = self.load(draft_id, profile_key)
         profile = self.catalog.profile(profile_key)
+        footprint = validate_footprint(metadata.get("footprint", "1x1"))
         groups = metadata.get("groups", {})
         missing = [group["id"] for group in profile["groups"] if not groups.get(group["id"], {}).get("ready")]
         return {
             "draft_id": draft_id,
             "profile": profile_key,
+            "footprint": footprint,
+            "cell_size": footprint_cell_size(footprint),
             "identity": metadata.get("identity", {"name": "", "slug": "", "description": ""}),
             "groups": groups,
             "missing_groups": missing,
@@ -1001,7 +1180,7 @@ class DraftManager:
 
     def processed_file(self, draft_id: str, stored_name: str) -> Path:
         validate_draft_id(draft_id)
-        if not re.fullmatch(r"[a-z][a-z0-9_-]*__\d+\.png", stored_name):
+        if not re.fullmatch(r"[a-z][a-z0-9_-]*__(?:\d+|original__\d+)\.png", stored_name):
             raise AppError("Invalid draft image name.")
         root = self.draft_dir(draft_id) / "processed"
         path = (root / stored_name).resolve()
@@ -1025,6 +1204,7 @@ class DraftManager:
     def validate_for_export(self, draft_id: str, profile_key: str) -> DraftValidation:
         metadata = self.load(draft_id, profile_key)
         profile = self.catalog.profile(profile_key)
+        cell_size = footprint_cell_size(metadata.get("footprint", "1x1"))
         files: list[tuple[Path, str]] = []
         source_files: list[tuple[Path, str]] = []
         warnings: list[str] = []
@@ -1048,7 +1228,7 @@ class DraftManager:
                 path = self.processed_file(draft_id, str(record["stored_name"]))
                 if record.get("suffix") != spec["suffix"]:
                     raise AppError(f"Draft metadata mismatch for {group['label']}.")
-                warnings.extend(validate_finished_png(path, spec, group))
+                warnings.extend(validate_finished_png(path, spec, group, cell_size))
                 files.append((path, str(spec["suffix"])))
         if missing:
             raise AppError("Missing required images: " + ", ".join(missing))
@@ -1075,6 +1255,7 @@ class DraftManager:
 
     def export(self, draft_id: str, profile_key: str, slug: str, sprites_root: Path) -> dict[str, Any]:
         slug = validate_slug(slug)
+        footprint = validate_footprint(self.load(draft_id, profile_key).get("footprint", "1x1"))
         validation = self.validate_for_export(draft_id, profile_key)
         profile = self.catalog.profile(profile_key)
         parent = (sprites_root / str(profile["folder"])).resolve()
@@ -1138,6 +1319,8 @@ class DraftManager:
             "source_path": str(source_target),
             "source_relative_path": source_relative,
             "source_file_count": len(validation.source_files),
+            "footprint": footprint,
+            "cell_size": footprint_cell_size(footprint),
             "warnings": validation.warnings,
             "note": "Godot will generate .import files automatically.",
         }
@@ -1160,12 +1343,12 @@ def infer_asset_spec(file_name: str, folder_name: str, specs: list[dict[str, Any
 def load_library_metadata(root: Path) -> dict[str, Any]:
     path = root / LIBRARY_METADATA_FILENAME
     if not path.exists():
-        return {"version": 1, "entities": {}}
+        return {"version": 2, "entities": {}}
     data = read_json(path)
     entities = data.get("entities")
     if not isinstance(entities, dict):
         raise AppError(f"{LIBRARY_METADATA_FILENAME} must contain an entities object.")
-    return {"version": 1, "entities": entities}
+    return {"version": 2, "entities": entities}
 
 
 def scan_sprite_library(
@@ -1191,6 +1374,24 @@ def scan_sprite_library(
             continue
         specs = catalog.all_output_specs(profile_key)
         for entity_dir in sorted((p for p in profile_root.iterdir() if p.is_dir() and not p.name.startswith(".")), key=lambda p: p.name.casefold()):
+            metadata_key = f"{profile_key}/{entity_dir.name}"
+            saved_details = metadata_entities.get(metadata_key, {}) if isinstance(metadata_entities, dict) else {}
+            if not isinstance(saved_details, dict):
+                saved_details = {}
+            saved_name = saved_details.get("name", "")
+            saved_description = saved_details.get("description", "")
+            if not isinstance(saved_name, str):
+                saved_name = ""
+            if not isinstance(saved_description, str):
+                saved_description = ""
+            try:
+                footprint = validate_footprint(saved_details.get("footprint", "1x1"))
+            except AppError:
+                footprint = "1x1"
+                errors.append(
+                    f"{profile_key}/{entity_dir.name} has an invalid saved footprint; using 1x1."
+                )
+            expected_cell_size = footprint_cell_size(footprint)
             assets: list[dict[str, Any]] = []
             for path in sorted(entity_dir.rglob("*.png"), key=lambda p: str(p).casefold()):
                 try:
@@ -1209,8 +1410,20 @@ def scan_sprite_library(
                         warnings.append(f"Width {width} is not divisible by {frames} frames.")
                     frame_width = width // frames if animated and width % frames == 0 else width
                     frame_height = height
-                    if animated and (frame_width != 32 or height != 32):
-                        warnings.append(f"Frames are {frame_width}x{height}, not 32x32.")
+                    if animated and (frame_width != expected_cell_size or height != expected_cell_size):
+                        warnings.append(
+                            f"Frames are {frame_width}x{height}, not "
+                            f"{expected_cell_size}x{expected_cell_size} for a {footprint} footprint."
+                        )
+                    if (
+                        not animated
+                        and bool(spec.get("footprint_scaled", False))
+                        and (width != expected_cell_size or height != expected_cell_size)
+                    ):
+                        warnings.append(
+                            f"Base sprite is {width}x{height}, not "
+                            f"{expected_cell_size}x{expected_cell_size} for a {footprint} footprint."
+                        )
                     relative = path.relative_to(root).as_posix()
                     assets.append({
                         "name": path.name,
@@ -1227,16 +1440,6 @@ def scan_sprite_library(
                     })
                 except AppError as exc:
                     assets.append({"name": path.name, "error": str(exc), "relative_path": path.relative_to(root).as_posix()})
-            metadata_key = f"{profile_key}/{entity_dir.name}"
-            saved_details = metadata_entities.get(metadata_key, {}) if isinstance(metadata_entities, dict) else {}
-            if not isinstance(saved_details, dict):
-                saved_details = {}
-            saved_name = saved_details.get("name", "")
-            saved_description = saved_details.get("description", "")
-            if not isinstance(saved_name, str):
-                saved_name = ""
-            if not isinstance(saved_description, str):
-                saved_description = ""
             entities.append({
                 "profile": profile_key,
                 "profile_label": profile["label"],
@@ -1244,7 +1447,9 @@ def scan_sprite_library(
                 "folder": entity_dir.name,
                 "display_name": saved_name or entity_dir.name,
                 "description": saved_description,
-                "metadata_present": bool(saved_name or saved_description),
+                "footprint": footprint,
+                "cell_size": expected_cell_size,
+                "metadata_present": bool(saved_name or saved_description or footprint != "1x1"),
                 "relative_path": entity_dir.relative_to(root).as_posix(),
                 "assets": assets,
                 "asset_count": len(assets),
@@ -1326,11 +1531,13 @@ class AppState:
         folder: str,
         name: Any,
         description: Any,
+        footprint: Any = "1x1",
     ) -> dict[str, Any]:
         profile = self.catalog.profile(profile_key)
         if not isinstance(folder, str) or not folder or Path(folder).name != folder or "/" in folder or "\\" in folder:
             raise AppError("Invalid sprite folder name.")
         name, description = validate_identity(name, description)
+        footprint = validate_footprint(footprint)
         profile_root = (self.sprites_root / str(profile["folder"])).resolve()
         entity_dir = (profile_root / folder).resolve()
         if not is_within(entity_dir, profile_root) or not entity_dir.is_dir():
@@ -1343,6 +1550,7 @@ class AppState:
                 "folder": folder,
                 "name": name,
                 "description": description,
+                "footprint": footprint,
                 "updated_at": int(time.time()),
             }
             metadata.setdefault("entities", {})[key] = record
@@ -1502,6 +1710,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                         "row_tolerance": int(state.drafts.normalizer_defaults.get("row_tolerance", 12)),
                     },
                     "quality_defaults": state.drafts._quality_settings(None),
+                    "footprints": {
+                        key: {"cell_size": size}
+                        for key, size in FOOTPRINT_SIZES.items()
+                    },
                 })
             elif path == "/api/library":
                 self._send_json({"ok": True, **state.library_scan()})
@@ -1553,6 +1765,14 @@ class RequestHandler(BaseHTTPRequestHandler):
                     body.get("description", ""),
                 )
                 self._send_json({"ok": True, **result})
+            elif path == "/api/draft/footprint":
+                body = self._read_json_body()
+                result = state.drafts.set_footprint(
+                    str(body.get("draft", "")),
+                    str(body.get("profile", "")),
+                    body.get("footprint", "1x1"),
+                )
+                self._send_json({"ok": True, **result})
             elif path == "/api/export":
                 body = self._read_json_body()
                 profile_key = str(body.get("profile", ""))
@@ -1561,7 +1781,13 @@ class RequestHandler(BaseHTTPRequestHandler):
                 result = state.drafts.export(
                     str(body.get("draft", "")), profile_key, slug, state.sprites_root
                 )
-                result["metadata"] = state.save_library_metadata(profile_key, validate_slug(slug), name, description)
+                result["metadata"] = state.save_library_metadata(
+                    profile_key,
+                    validate_slug(slug),
+                    name,
+                    description,
+                    result["footprint"],
+                )
                 self._send_json(result)
             elif path == "/api/library/metadata":
                 body = self._read_json_body()
@@ -1570,6 +1796,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     str(body.get("folder", "")),
                     body.get("name", ""),
                     body.get("description", ""),
+                    body.get("footprint", "1x1"),
                 )
                 self._send_json({"ok": True, "metadata": record})
             elif path == "/api/templates":
