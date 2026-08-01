@@ -1,5 +1,4 @@
 .venv/
 workspace/
-source_assets/
 __pycache__/
 *.pyc
