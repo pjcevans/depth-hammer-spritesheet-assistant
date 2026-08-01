@@ -33,7 +33,7 @@ The app automatically finds the sibling `depth-hammer` repository. If either fol
 5. Generate the prompts and copy each prompt into your image-generation conversation. Use the same base reference image for every animation prompt.
 6. Upload one PNG, JPEG or WebP source artwork image. Drag, scale and position it in the crop tool; one crop produces the 256×256 `_large` image and the footprint-sized base sprite.
 7. Open the size-labelled **output controls** to choose a quick preset or directly adjust the downscale filter, pre-shrink blur, sharpness, palette size, alpha-aware resizing and edge cleanup. The same controls are available for every animation upload.
-8. Upload the returned PNG for each animation group. The normaliser runs immediately and shows a large original-resolution frame beside the true-size 32×32 or 64×64 in-game result. Uploading a replacement uses a new preview version, so stale browser-cached artwork is not shown. Existing Sprite Library assets are shown once at their actual stored size.
+8. Upload the returned PNG for each animation group. The normaliser runs immediately and shows the original-resolution frame in a large preview stage (up to 512×512) beside the true-size 32×32 or 64×64 in-game result. Uploading a replacement uses a new preview version, so stale browser-cached artwork is not shown. Existing Sprite Library assets are shown once at their actual stored size.
 9. Resolve any remaining frame-count or transparency errors. Open **Sprite detection controls** to adjust the grid, alpha threshold, component area or row tolerance and reprocess the original upload without uploading it again.
 10. Choose **Export to folder**. The game-ready files go to the sibling repository's `depth-hammer\assets\entity_sprites\default`, and the untouched full-size uploads stay local to the app in `depth-hammer-spritesheet-assistant\source_assets\<folder-name>`.
 
@@ -49,7 +49,13 @@ A 16-sprite directional upload becomes four 4-frame Godot strips. Eight-frame de
 
 Every existing player and monster folder has editable **Name**, **Description** and **Footprint** fields in the Sprite Library. New exports populate them automatically. Older folders show empty description fields and default to 1×1 until changed. Changing an existing set's footprint updates its metadata and validation expectations; it does not rewrite exported artwork. These details are stored in `entity_sprites\default\sprite_library_metadata.json`, outside the assistant folder, so replacing or updating the app does not discard them.
 
-## Export safety
+Directional animations can be replaced in logical blocks. **Replace all walk directions**, for example, accepts one combined 16-frame upload in north/east/west/south order, previews the four resulting strips, and updates `walk_up`, `walk_right`, `walk_left` and `walk_down` together. Melee, cast, mine and shoot use the same grouped workflow when present. Every directional card also retains **Replace only this direction** for exceptional one-strip fixes; that path updates only the selected PNG.
+
+Standalone assets—base, large, death, deathfire, wake, rest and custom sheets—retain **Replace this asset**. Both editors provide the same relevant crop, 1×1/2×2 footprint, sprite-detection, grid, alpha, filter, sharpness, palette and cleanup controls used during creation. They show the full-resolution upload beside the finished game-size result and keep the current game files unchanged until **Apply replacement** is confirmed.
+
+Applying a replacement is atomic: either every file in its block is updated or none are. An individual-direction replacement is independently atomic and does not touch the other three strips. The Library preview refreshes immediately, the untouched grouped upload is saved as `source_assets\<folder-name>\<folder-name>_<action>.png`, and standalone sources keep their exact asset name. Processing settings are retained for every affected asset and restored the next time that block or individual sheet is edited.
+
+## New-folder export safety
 
 - Monster exports contain 13 PNGs: base, large, and 11 animation strips.
 - Player exports contain 25 PNGs: base, large, and 23 animation strips.
@@ -58,8 +64,8 @@ Every existing player and monster folder has editable **Name**, **Description** 
 - Final animation cells are exactly 32×32 for 1×1 sets or 64×64 for 2×2 sets.
 - The destination folder must not already exist, including a case-only name match.
 - Files are staged and verified before the destination folder becomes visible.
-- Existing folders are never merged, replaced or partially updated.
-- Existing full-size source folders are never overwritten.
+- New-folder export never merges, replaces or partially updates an existing game folder.
+- New-folder export never overwrites an existing full-size source folder. Confirmed single-asset Library edits update only their matching source PNG.
 - `.import` files are deliberately not created; Godot generates them.
 
 ## Editing prompts and profiles

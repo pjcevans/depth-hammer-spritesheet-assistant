@@ -234,9 +234,9 @@ code { color: var(--gold-soft); font-family: "Cascadia Code", Consolas, monospac
 .asset-preview img { max-width: 100%; max-height: 220px; object-fit: contain; image-rendering: pixelated; }
 .asset-preview.library-preview canvas { width: auto; max-width: 100%; height: auto; }
 .asset-preview.preview-comparison {
-  min-height: 286px;
-  grid-template-columns: minmax(230px, 1fr) 96px;
-  gap: 14px;
+  min-height: 552px;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 18px;
   place-items: stretch;
 }
 .preview-stage {
@@ -248,8 +248,8 @@ code { color: var(--gold-soft); font-family: "Cascadia Code", Consolas, monospac
   gap: 8px;
 }
 .preview-media { width: 100%; display: grid; place-items: center; }
-.preview-stage.original canvas { width: min(256px, 100%); }
-.preview-stage.original img { width: min(320px, 100%); max-height: 320px; }
+.preview-stage.original canvas { width: min(512px, 100%); }
+.preview-stage.original img { width: min(512px, 100%); max-height: 512px; }
 .preview-stage.actual { padding-left: 14px; border-left: 1px solid var(--line-soft); }
 .preview-stage.actual canvas { width: 32px; height: 32px; }
 .preview-stage-label {
@@ -264,6 +264,33 @@ code { color: var(--gold-soft); font-family: "Cascadia Code", Consolas, monospac
 .asset-meta strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }
 .asset-meta span { display: block; margin-top: 5px; color: var(--muted); font-size: .68rem; }
 .asset-warning { color: var(--warning) !important; white-space: normal !important; }
+.asset-replace-button { width: 100%; margin-top: 10px; }
+.library-replacement-host { margin: 0 0 20px; scroll-margin-top: 18px; }
+.library-replacement-card { border-color: rgba(199, 146, 66, .7); box-shadow: 0 18px 42px rgba(0,0,0,.3); }
+.library-replacement-card .replacement-comparison { min-height: 552px; }
+.library-replacement-card .preview-stage.actual img { width: min(256px, 100%); max-height: 256px; }
+.library-replacement-actions {
+  padding: 15px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--line-soft);
+  background: rgba(199, 146, 66, .05);
+}
+.library-replacement-actions span { margin-right: auto; color: var(--muted); font-family: monospace; font-size: .68rem; }
+.library-block-actions {
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  background: rgba(199, 146, 66, .05);
+  border: 1px solid var(--gold-dark);
+  border-radius: var(--radius);
+}
+.library-block-actions h4 { margin: 0 0 5px; color: var(--gold-soft); font-family: Georgia, serif; }
+.library-block-actions p { margin: 0 0 12px; color: var(--muted); font-size: .72rem; }
+.library-block-buttons { display: flex; flex-wrap: wrap; gap: 9px; }
+.asset-group-note { color: var(--gold-soft) !important; line-height: 1.35; white-space: normal !important; }
+.replacement-scope { grid-column: 1 / -1; white-space: normal; }
 .empty-state { min-height: 250px; display: grid; place-items: center; padding: 22px; color: var(--muted); text-align: center; }
 .empty-state.compact { min-height: 120px; }
 
@@ -388,11 +415,11 @@ code { color: var(--gold-soft); font-family: "Cascadia Code", Consolas, monospac
 .detection-method { color: var(--muted); font-size: .69rem; }
 .upload-message { min-height: 0; margin: -4px 16px 14px; color: var(--muted); font-size: .72rem; }
 .upload-message.error-text { color: #f1a39e; }
-.processed-output { display: grid; grid-template-columns: repeat(auto-fill, minmax(390px, 1fr)); gap: 9px; padding: 0 16px 16px; }
+.processed-output { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(680px, 100%), 1fr)); gap: 12px; padding: 0 16px 16px; }
 .processed-output:empty { display: none; }
 .processed-item { overflow: hidden; background: #0b1119; border: 1px solid var(--line-soft); border-radius: 5px; }
-.processed-item .asset-preview { min-height: 180px; }
-.processed-item .asset-preview > img { max-height: 320px; }
+.processed-item .asset-preview { min-height: 552px; }
+.processed-item .asset-preview > img { max-height: 512px; }
 .processed-name { padding: 8px; overflow: hidden; color: var(--muted); font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
 .export-card { margin-top: 22px; padding: clamp(18px, 2.2vw, 27px); display: flex; align-items: center; justify-content: space-between; gap: 25px; border-color: var(--gold-dark); }
 .export-card h3 { margin: 5px 0 6px; font-family: Georgia, serif; font-size: 1.3rem; }
@@ -431,10 +458,12 @@ code { color: var(--gold-soft); font-family: "Cascadia Code", Consolas, monospac
   .library-metadata, .crop-workspace, .quality-grid, .detection-grid { grid-template-columns: 1fr; }
   .processed-output { grid-template-columns: 1fr; }
   .asset-preview.preview-comparison {
-    min-height: 250px;
-    grid-template-columns: minmax(170px, 1fr) 82px;
+    min-height: 402px;
+    grid-template-columns: minmax(0, 1fr) 82px;
   }
-  .preview-stage.original canvas { width: min(220px, 100%); }
+  .preview-stage.original canvas { width: min(360px, 100%); }
+  .preview-stage.original img { width: min(360px, 100%); max-height: 360px; }
+  .processed-item .asset-preview { min-height: 402px; }
   .metadata-note { grid-column: auto; }
   .progress-card { grid-template-columns: 1fr; }
   .template-list { grid-template-columns: 1fr; }

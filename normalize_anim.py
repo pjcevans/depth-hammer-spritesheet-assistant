@@ -125,7 +125,6 @@ DEFAULT_BATCH_CONFIG: dict[str, Any] = {
         "source_rows": None,
         "blob_detect": True,
         "fit": True,
-        "uniform_frame_scale": False,
         "allow_upscale": False,
         "align_hor": "center",
         "align_ver": "bottom",
@@ -196,7 +195,6 @@ class NormalizeOptions:
     source_rows: Optional[int]
     blob_detect: bool
     fit: bool
-    uniform_frame_scale: bool
     allow_upscale: bool
     align_hor: str
     align_ver: str
@@ -800,10 +798,17 @@ def remove_small_alpha_specks(image: Image.Image, min_area: int) -> Image.Image:
     return clear_fully_transparent_rgb(rgba)
 
 
-def resize_sprite_by_scale(sprite: Image.Image, scale: float, options: NormalizeOptions) -> Image.Image:
+def fit_sprite_to_cell(sprite: Image.Image, cell_size: int, allow_upscale: bool, options: NormalizeOptions) -> Image.Image:
     sprite = ensure_rgba(sprite)
     sprite_w, sprite_h = sprite.size
     if sprite_w <= 0 or sprite_h <= 0:
+        return sprite
+
+    fit_padding = max(0, min(cell_size // 2 - 1 if cell_size > 2 else 0, options.fit_padding))
+    target_box = max(1, cell_size - (fit_padding * 2))
+    scale = min(target_box / sprite_w, target_box / sprite_h)
+
+    if scale >= 1.0 and not allow_upscale:
         return sprite
 
     new_w = max(1, int(round(sprite_w * scale)))
@@ -856,21 +861,6 @@ def resize_sprite_by_scale(sprite: Image.Image, scale: float, options: Normalize
     return clear_fully_transparent_rgb(resized)
 
 
-def fit_sprite_to_cell(sprite: Image.Image, cell_size: int, allow_upscale: bool, options: NormalizeOptions) -> Image.Image:
-    sprite = ensure_rgba(sprite)
-    sprite_w, sprite_h = sprite.size
-    if sprite_w <= 0 or sprite_h <= 0:
-        return sprite
-
-    fit_padding = max(0, min(cell_size // 2 - 1 if cell_size > 2 else 0, options.fit_padding))
-    target_box = max(1, cell_size - (fit_padding * 2))
-    scale = min(target_box / sprite_w, target_box / sprite_h)
-
-    if scale >= 1.0 and not allow_upscale:
-        return sprite
-    return resize_sprite_by_scale(sprite, scale, options)
-
-
 def calculate_placement(
     sprite_size: tuple[int, int],
     cell_size: int,
@@ -904,17 +894,6 @@ def calculate_placement(
 
 def build_output_strip(frames: list[CropFrame], cell_size: int, options: NormalizeOptions) -> Image.Image:
     output = Image.new("RGBA", (options.frames * cell_size, cell_size), (0, 0, 0, 0))
-    uniform_scale: Optional[float] = None
-    if options.fit and options.uniform_frame_scale:
-        populated = [frame.image.size for frame in frames[:options.frames] if frame.image.width and frame.image.height]
-        if populated:
-            fit_padding = max(0, min(cell_size // 2 - 1 if cell_size > 2 else 0, options.fit_padding))
-            target_box = max(1, cell_size - (fit_padding * 2))
-            maximum_width = max(width for width, _height in populated)
-            maximum_height = max(height for _width, height in populated)
-            uniform_scale = min(target_box / maximum_width, target_box / maximum_height)
-            if uniform_scale >= 1.0 and not options.allow_upscale:
-                uniform_scale = 1.0
 
     for index in range(options.frames):
         if index >= len(frames):
@@ -924,10 +903,7 @@ def build_output_strip(frames: list[CropFrame], cell_size: int, options: Normali
         original_w, original_h = original.size
         frame.original_size = (original_w, original_h)
 
-        if uniform_scale is not None:
-            sprite = resize_sprite_by_scale(original, uniform_scale, options)
-        else:
-            sprite = fit_sprite_to_cell(original, cell_size, options.allow_upscale, options) if options.fit else original
+        sprite = fit_sprite_to_cell(original, cell_size, options.allow_upscale, options) if options.fit else original
         sprite_w, sprite_h = sprite.size
         frame.final_size = (sprite_w, sprite_h)
         frame.scaled = (sprite_w, sprite_h) != (original_w, original_h)
@@ -1022,8 +998,6 @@ def validate_options(options: NormalizeOptions) -> None:
         fail("fit_padding must be 0 or greater.")
     if options.allow_upscale and not options.fit:
         warn("--allow-upscale has no effect unless --fit is also used.")
-    if options.uniform_frame_scale and not options.fit:
-        warn("--uniform-frame-scale has no effect unless fitting is enabled.")
 
 
 def normalize_file(input_path: Path, output_path: Path, options: NormalizeOptions) -> None:
@@ -1198,7 +1172,6 @@ def config_to_options(config: dict[str, Any], context: str) -> NormalizeOptions:
         source_rows=optional_int(config, "source_rows", context),
         blob_detect=require_bool(config, "blob_detect", context),
         fit=require_bool(config, "fit", context),
-        uniform_frame_scale=require_bool(config, "uniform_frame_scale", context),
         allow_upscale=require_bool(config, "allow_upscale", context),
         align_hor=align_hor,
         align_ver=align_ver,
@@ -1264,7 +1237,6 @@ def apply_cli_overrides_to_config(config: dict[str, Any], args: argparse.Namespa
         "source_cols": args.source_cols,
         "source_rows": args.source_rows,
         "fit": True if args.fit else None,
-        "uniform_frame_scale": True if args.uniform_frame_scale else None,
         "allow_upscale": True if args.allow_upscale else None,
         "align_hor": args.align_hor,
         "align_ver": args.align_ver,
@@ -1504,11 +1476,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-rows", type=int, default=None, help="Source grid rows. Enables source grid mode when used with --source-cols.")
     parser.add_argument("--blob-detect", action="store_true", help="Use blob detection mode. This is the default when no source grid is provided.")
     parser.add_argument("--fit", action="store_true", help="Scale each cropped frame to fit inside the output cell.")
-    parser.add_argument(
-        "--uniform-frame-scale",
-        action="store_true",
-        help="Use one shared fit scale for every frame, preserving relative pose sizes (useful for wake animations).",
-    )
     parser.add_argument("--allow-upscale", action="store_true", help="Allow --fit to scale small sprites up as well as large sprites down.")
     parser.add_argument("--reverse", action="store_true", help="Reverse the detected/extracted frame order. Does not mirror the images.")
     parser.add_argument("--align", choices=["center", "bottom-center", "top-center"], default=None, help="Convenience alignment preset.")

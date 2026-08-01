@@ -8,6 +8,7 @@ const state = {
   templates: null,
   library: [],
   librarySelected: null,
+  libraryEditor: null,
   creators: {},
 };
 
@@ -171,8 +172,8 @@ function fillTemplate(template, values) {
   return template.replace(/\{\{([a-z_]+)\}\}/gi, (_match, key) => values[key] ?? `{{${key}}}`);
 }
 
-function mediaUrl(relativePath) {
-  return buildUrl("/media", { path: relativePath, token: runToken });
+function mediaUrl(relativePath, version = "") {
+  return buildUrl("/media", { path: relativePath, version, token: runToken });
 }
 
 function draftMediaUrl(draftId, storedName, version = "") {
@@ -189,6 +190,16 @@ function draftRawUrl(creator, groupId, rawVersion = "") {
     draft: creator.draftId,
     profile: creator.profileKey,
     group: groupId,
+    version: rawVersion,
+    token: runToken,
+  });
+}
+
+function libraryReplacementRawUrl(view, rawVersion = "") {
+  return buildUrl("/draft-raw", {
+    draft: view.editId,
+    profile: "__library__",
+    group: view.group.id,
     version: rawVersion,
     token: runToken,
   });
@@ -724,7 +735,9 @@ function setCropControls(view, saved) {
     image.addEventListener("error", () => {
       view.card.querySelector(".crop-status").textContent = "Could not load the crop source preview.";
     });
-    image.src = draftRawUrl(view.creator, view.group.id, saved.raw_version || "");
+    image.src = view.libraryEditor
+      ? libraryReplacementRawUrl(view, saved.raw_version || "")
+      : draftRawUrl(view.creator, view.group.id, saved.raw_version || "");
   }
   drawCropPreview(view);
 }
@@ -774,6 +787,10 @@ function wireCropControls(view) {
 }
 
 async function reprocessGroup(view, processing = null) {
+  if (view.libraryEditor) {
+    await reprocessLibraryReplacement(view, processing);
+    return;
+  }
   const button = view.group.mode === "crop_pair"
     ? view.card.querySelector(".apply-crop")
     : view.card.querySelector(".reprocess-group");
@@ -1373,6 +1390,399 @@ async function exportCreator(creator) {
   }
 }
 
+function replacementGridHint(frames) {
+  const factors = [];
+  for (let columns = 1; columns <= frames; columns += 1) {
+    if (frames % columns === 0) factors.push([columns, frames / columns]);
+  }
+  factors.sort((left, right) => {
+    const leftScore = [Math.abs(left[0] - left[1]), Math.abs(left[0] - 4)];
+    const rightScore = [Math.abs(right[0] - right[1]), Math.abs(right[0] - 4)];
+    return leftScore[0] - rightScore[0] || leftScore[1] - rightScore[1];
+  });
+  return factors[0] || [frames, 1];
+}
+
+function libraryReplacementGroup(asset, directionalGroup = null) {
+  if (directionalGroup) {
+    const framesPerDirection = directionalGroup.source_frames / directionalGroup.asset_names.length;
+    return {
+      id: `replace_block_${directionalGroup.id}`,
+      label: `Replace ${directionalGroup.label}`,
+      mode: "normalize_split",
+      source_frames: directionalGroup.source_frames,
+      grid_hint: directionalGroup.grid_hint || [4, 4],
+      prefer_grid_reading_order: true,
+      outputs: directionalGroup.asset_names.map((name, index) => ({
+        suffix: name,
+        frames: framesPerDirection,
+        start: index * framesPerDirection,
+        frame_ms: asset.frame_ms || 170,
+      })),
+    };
+  }
+  const frames = Math.max(1, Number(asset.frames || 1));
+  if (frames > 1) {
+    return {
+      id: `replace_anim_${frames}`,
+      label: `Replace ${asset.name}`,
+      mode: "normalize",
+      source_frames: frames,
+      grid_hint: replacementGridHint(frames),
+      prefer_grid_reading_order: true,
+      outputs: [{ suffix: ".png", frames, start: 0, frame_ms: asset.frame_ms || 170 }],
+    };
+  }
+  if (asset.footprint_scaled) {
+    return {
+      id: "replace_small",
+      label: `Replace ${asset.name}`,
+      mode: "crop_pair",
+      source_frames: 1,
+      outputs: [{ suffix: ".png", frames: 1, start: 0, footprint_scaled: true }],
+    };
+  }
+  if (/_large\.png$/i.test(asset.name || "")) {
+    return {
+      id: "replace_large",
+      label: `Replace ${asset.name}`,
+      mode: "crop_pair",
+      source_frames: 1,
+      outputs: [{ suffix: "_large.png", frames: 1, start: 0, size: [256, 256] }],
+    };
+  }
+  return {
+    id: "replace_passthrough",
+    label: `Replace ${asset.name}`,
+    mode: "passthrough",
+    source_frames: 1,
+    outputs: [{ suffix: ".png", frames: 1, start: 0 }],
+  };
+}
+
+function addLibraryReplacementPreview(container, output, outputUrl, original, originalUrl, cellSize) {
+  container.classList.add("preview-comparison", "replacement-comparison");
+  const makeStage = (className, labelText) => {
+    const stage = document.createElement("div");
+    stage.className = `preview-stage ${className}`;
+    const media = document.createElement("div");
+    media.className = "preview-media";
+    const label = document.createElement("span");
+    label.className = "preview-stage-label";
+    label.textContent = labelText;
+    stage.append(media, label);
+    return { stage, media };
+  };
+  const sourceStage = makeStage("original", "Original upload");
+  const resultLabel = output.frames > 1 || (output.width === cellSize && output.height === cellSize)
+    ? `${cellSize}×${cellSize} in game`
+    : `${output.width}×${output.height} replacement`;
+  const resultStage = makeStage("actual", resultLabel);
+  container.append(sourceStage.stage, resultStage.stage);
+  addSpritePreview(sourceStage.media, original, originalUrl);
+  addSpritePreview(resultStage.media, output, outputUrl);
+  const resultCanvas = resultStage.media.querySelector("canvas");
+  if (resultCanvas && output.height === cellSize) {
+    resultCanvas.style.width = `${cellSize}px`;
+    resultCanvas.style.height = `${cellSize}px`;
+  }
+}
+
+function renderLibraryReplacement(view) {
+  const saved = view.result && view.result.group;
+  const badge = view.card.querySelector(".completion-badge");
+  const message = view.card.querySelector(".upload-message");
+  const output = view.card.querySelector(".processed-output");
+  const cellSize = footprintCellSize(view.footprintControl.value);
+  view.card.classList.remove("ready", "error");
+  output.replaceChildren();
+  view.card.querySelector(".quality-size").textContent = `${cellSize}×${cellSize}`;
+  view.card.querySelector(".apply-quality").textContent = `Apply ${cellSize}×${cellSize} settings`;
+
+  if (view.group.mode === "crop_pair") {
+    const cropEditor = view.card.querySelector(".crop-editor");
+    cropEditor.classList.toggle("hidden", !saved || !saved.raw_name);
+    if (saved && saved.raw_name) {
+      setCropControls(view, saved);
+      view.card.querySelector(".crop-status").textContent = saved.ready
+        ? `Crop applied to the replacement for ${view.displayLabel}.`
+        : "Adjust the crop and apply it again.";
+    }
+  } else if (view.group.mode !== "passthrough") {
+    view.card.querySelector(".reprocess-group").disabled = !saved || !saved.raw_name;
+    if (saved && saved.settings) setDetectionControls(view, saved.settings);
+    view.card.querySelector(".detection-method").textContent = saved && saved.processing_method
+      ? `Last result: ${saved.processing_method}`
+      : "No image processed yet.";
+  }
+  if (view.group.mode !== "passthrough") {
+    view.card.querySelector(".apply-quality").disabled = !saved || !saved.raw_name;
+    if (saved && saved.quality) {
+      setQualityControls(view, saved.quality);
+      view.card.querySelector(".quality-note").textContent =
+        `Last output: ${saved.quality.downscale_filter} filter, ${Number(saved.quality.sharpen).toFixed(2)}× sharpness, `
+        + `${saved.quality.quantize ? `${saved.quality.colour_count}-colour palette` : "full colour"}.`;
+    }
+  }
+
+  view.commitButton.disabled = !saved || !saved.ready;
+  if (saved && saved.ready && saved.outputs && saved.outputs[0]) {
+    view.card.classList.add("ready");
+    badge.textContent = "Ready to apply";
+    const method = saved.processing_method ? ` · ${saved.processing_method}` : "";
+    const warnings = (saved.warnings || []).join(" ");
+    message.className = "upload-message";
+    message.textContent = `Source ${saved.source_width}x${saved.source_height} processed${method}.${warnings ? ` ${warnings}` : ""}`;
+    saved.outputs.forEach((record, index) => {
+      const targetName = view.targetNames[index] || view.asset.name;
+      const originalRecord = (saved.original_previews || [])[index];
+      const original = originalRecord
+        ? {
+            ...originalRecord,
+            name: `${targetName} original upload`,
+            frame_width: originalRecord.width / originalRecord.frames,
+            frame_height: originalRecord.height,
+          }
+        : {
+            name: `${view.displayLabel} original upload`,
+            frames: 1,
+            width: saved.source_width,
+            height: saved.source_height,
+            frame_width: saved.source_width,
+            frame_height: saved.source_height,
+          };
+      const originalUrl = originalRecord
+        ? draftMediaUrl(view.editId, originalRecord.stored_name, saved.processed_version || saved.raw_version || "")
+        : libraryReplacementRawUrl(view, saved.raw_version || "");
+      const preview = document.createElement("div");
+      preview.className = "asset-preview";
+      addLibraryReplacementPreview(
+        preview,
+        {
+          ...record,
+          name: targetName,
+          frame_width: record.width / record.frames,
+          frame_height: record.height,
+        },
+        draftMediaUrl(view.editId, record.stored_name, saved.processed_version || saved.raw_version || ""),
+        original,
+        originalUrl,
+        Number(saved.cell_size || cellSize),
+      );
+      const label = document.createElement("div");
+      label.className = "processed-name";
+      label.textContent = `${targetName} · ${record.width}x${record.height}`;
+      const item = document.createElement("div");
+      item.className = "processed-item";
+      item.append(preview, label);
+      output.append(item);
+    });
+    const scope = document.createElement("div");
+    scope.className = "processed-name replacement-scope";
+    scope.textContent = view.actionGroup
+      ? `All ${view.targetNames.length} directional PNGs will be replaced together.`
+      : "Only this PNG will be replaced.";
+    output.append(scope);
+  } else if (saved && saved.error) {
+    view.card.classList.add("error");
+    badge.textContent = "Needs attention";
+    message.className = "upload-message error-text";
+    message.textContent = saved.error;
+  } else {
+    badge.textContent = "Waiting";
+    message.className = "upload-message";
+    message.textContent = "Choose a replacement source image. Existing game assets remain unchanged until Apply replacement is confirmed.";
+  }
+}
+
+async function uploadLibraryReplacement(view, file) {
+  const cropMode = view.group.mode === "crop_pair";
+  if ((!cropMode && !/\.png$/i.test(file.name)) || (cropMode && !/\.(png|jpe?g|webp)$/i.test(file.name))) {
+    toast(cropMode ? "Choose a PNG, JPEG or WebP image." : "Choose a PNG file.", "error");
+    return;
+  }
+  view.input.disabled = true;
+  view.card.querySelector(".completion-badge").textContent = "Processing";
+  try {
+    const params = {
+      edit: view.editId,
+      profile: view.entity.profile,
+      folder: view.entity.folder || view.entity.name,
+      asset: view.asset.name,
+      group: view.actionGroup || "",
+      footprint: view.footprintControl.value,
+      ...(view.group.mode === "passthrough" ? {} : processingSettings(view)),
+    };
+    view.result = await api(buildUrl("/api/library/replacement/upload", params), {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    renderLibraryReplacement(view);
+    toast(`${view.displayLabel} replacement is ready to review.`);
+  } catch (error) {
+    view.card.classList.add("error");
+    view.card.querySelector(".completion-badge").textContent = "Needs attention";
+    view.card.querySelector(".upload-message").textContent = error.message;
+    toast(error.message, "error");
+  } finally {
+    view.input.disabled = false;
+  }
+}
+
+async function reprocessLibraryReplacement(view, processing = null) {
+  if (!view.result || !view.result.group || !view.result.group.raw_name) {
+    toast("Upload a replacement image before reprocessing it.", "error");
+    return;
+  }
+  const buttons = [
+    view.card.querySelector(".apply-crop"),
+    view.card.querySelector(".reprocess-group"),
+    view.card.querySelector(".apply-quality"),
+  ].filter(Boolean);
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    view.result = await api("/api/library/replacement/reprocess", {
+      method: "POST",
+      json: {
+        edit: view.editId,
+        footprint: view.footprintControl.value,
+        processing: processing || processingSettings(view),
+      },
+    });
+    renderLibraryReplacement(view);
+    toast(`${view.displayLabel} replacement reprocessed.`);
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+}
+
+async function commitLibraryReplacement(view) {
+  const targetDescription = view.actionGroup
+    ? `${view.entity.relative_path}\n\n${view.targetNames.map((name) => `• ${name}`).join("\n")}`
+    : `${view.entity.relative_path}/${view.asset.name}`;
+  const scopeDescription = view.actionGroup
+    ? `All ${view.targetNames.length} directional PNGs will be overwritten as one block.`
+    : "Only this PNG will be overwritten.";
+  if (!window.confirm(
+    `Replace ${view.displayLabel}?\n\n${targetDescription}\n\n`
+    + `${scopeDescription} The untouched full-resolution upload will also be saved in source_assets.`,
+  )) return;
+  view.commitButton.disabled = true;
+  view.commitButton.textContent = "Applying…";
+  try {
+    const result = await api("/api/library/replacement/commit", {
+      method: "POST",
+      json: { edit: view.editId },
+    });
+    toast(result.asset_count > 1
+      ? `Replaced ${result.asset_count} ${view.actionGroup} direction sheets.`
+      : `Replaced ${result.relative_path}.`);
+    state.libraryEditor = null;
+    await loadLibrary();
+  } catch (error) {
+    toast(error.message, "error");
+    view.commitButton.disabled = false;
+  } finally {
+    view.commitButton.textContent = "Apply replacement";
+  }
+}
+
+function openLibraryReplacementEditor(entity, asset, footprintControl, host, directionalGroup = null) {
+  const fragment = document.getElementById("upload-card-template").content.cloneNode(true);
+  const card = fragment.querySelector(".upload-card");
+  const group = libraryReplacementGroup(asset, directionalGroup);
+  const displayLabel = directionalGroup ? `${directionalGroup.label} block` : asset.name;
+  const targetNames = directionalGroup ? directionalGroup.asset_names : [asset.name];
+  const view = {
+    libraryEditor: true,
+    editId: newDraftId(),
+    entity,
+    asset,
+    actionGroup: directionalGroup ? directionalGroup.id : "",
+    displayLabel,
+    targetNames,
+    group,
+    card,
+    input: card.querySelector(".group-upload"),
+    footprintControl,
+    result: null,
+    cropImage: null,
+    cropRawVersion: null,
+  };
+  state.libraryEditor = view;
+  card.classList.add("library-replacement-card");
+  card.querySelector(".prompt-box").classList.add("hidden");
+  card.querySelector(".group-number").textContent = directionalGroup ? "Directional block replacement" : "Standalone asset replacement";
+  card.querySelector(".group-label").textContent = `Replace ${displayLabel}`;
+  card.querySelector(".group-expectation").textContent = directionalGroup
+    ? `Upload one ${directionalGroup.source_frames}-frame sheet in north, east, west, south order. It will replace all four directional strips together.`
+    : asset.frames > 1
+    ? `Upload ${asset.frames} frames in any sensible grid; output will be ${asset.frames * footprintCellSize(footprintControl.value)}×${footprintCellSize(footprintControl.value)}.`
+    : "Upload one source image; only this selected PNG will be changed.";
+  const cropMode = group.mode === "crop_pair";
+  view.input.accept = cropMode ? "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" : "image/png,.png";
+  card.querySelector(".drop-icon").textContent = cropMode ? "IMAGE" : "PNG";
+  card.querySelector(".drop-title").textContent = `Choose replacement for ${displayLabel}`;
+  card.querySelector(".drop-help").textContent = "Upload again at any time to replace the pending edit. The game file is not touched until you confirm.";
+  view.input.addEventListener("change", () => {
+    const file = view.input.files && view.input.files[0];
+    if (file) uploadLibraryReplacement(view, file);
+    view.input.value = "";
+  });
+
+  if (group.mode !== "passthrough") {
+    card.querySelector(".quality-controls").classList.remove("hidden");
+    wireQualityControls(view);
+  }
+  if (cropMode) {
+    wireCropControls(view);
+  } else if (group.mode !== "passthrough") {
+    card.querySelector(".detection-controls").classList.remove("hidden");
+    setDetectionControls(view);
+    card.querySelector(".reprocess-group").addEventListener("click", () => reprocessGroup(view));
+  }
+
+  const presetSource = directionalGroup ? directionalGroup.processing_preset : asset.processing_preset;
+  const preset = presetSource && typeof presetSource === "object"
+    ? presetSource
+    : {};
+  if (preset.quality && group.mode !== "passthrough") setQualityControls(view, preset.quality, preset.preset || "");
+  if (preset.detection && group.mode !== "crop_pair" && group.mode !== "passthrough") {
+    setDetectionControls(view, preset.detection);
+  }
+  if (preset.crop && group.mode === "crop_pair") setCropInputValues(view, preset.crop);
+
+  const actions = document.createElement("div");
+  actions.className = "library-replacement-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "button ghost";
+  cancel.textContent = "Cancel edit";
+  cancel.addEventListener("click", () => {
+    state.libraryEditor = null;
+    host.replaceChildren();
+  });
+  const commit = document.createElement("button");
+  commit.type = "button";
+  commit.className = "button primary large";
+  commit.textContent = "Apply replacement";
+  commit.disabled = true;
+  commit.addEventListener("click", () => commitLibraryReplacement(view));
+  view.commitButton = commit;
+  const note = document.createElement("span");
+  note.textContent = directionalGroup
+    ? `Targets: ${targetNames.join(", ")}`
+    : `Target: ${entity.relative_path}/${asset.name}`;
+  actions.append(note, cancel, commit);
+  card.append(actions);
+  host.replaceChildren(fragment);
+  renderLibraryReplacement(view);
+  host.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function loadLibrary() {
   const button = document.getElementById("refresh-library");
   button.disabled = true;
@@ -1527,6 +1937,33 @@ function renderLibraryDetail(entity) {
   });
   metadata.append(nameLabel, descriptionLabel, footprintControl.element, save, note);
   detail.append(metadata);
+  const replacementHost = document.createElement("div");
+  replacementHost.className = "library-replacement-host";
+  detail.append(replacementHost);
+  if ((entity.replacement_groups || []).length) {
+    const blockPanel = document.createElement("section");
+    blockPanel.className = "library-block-actions";
+    const blockHeading = document.createElement("h4");
+    blockHeading.textContent = "Replace directional animation blocks";
+    const blockHelp = document.createElement("p");
+    blockHelp.textContent = "Each action accepts one combined sheet and replaces its north, east, west and south strips together.";
+    const blockButtons = document.createElement("div");
+    blockButtons.className = "library-block-buttons";
+    entity.replacement_groups.forEach((directionalGroup) => {
+      const representative = entity.assets.find((asset) => directionalGroup.asset_names.includes(asset.name));
+      if (!representative) return;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button secondary";
+      button.textContent = `Replace all ${directionalGroup.id} directions`;
+      button.addEventListener("click", () => {
+        openLibraryReplacementEditor(entity, representative, footprintControl, replacementHost, directionalGroup);
+      });
+      blockButtons.append(button);
+    });
+    blockPanel.append(blockHeading, blockHelp, blockButtons);
+    detail.append(blockPanel);
+  }
   const grid = document.createElement("div");
   grid.className = "asset-grid";
   if (!entity.assets.length) {
@@ -1540,7 +1977,7 @@ function renderLibraryDetail(entity) {
     if (asset.error) {
       preview.textContent = asset.error;
     } else {
-      addLibrarySpritePreview(preview, asset, mediaUrl(asset.relative_path));
+      addLibrarySpritePreview(preview, asset, mediaUrl(asset.relative_path, asset.version || ""));
     }
     const meta = document.createElement("div");
     meta.className = "asset-meta";
@@ -1555,6 +1992,24 @@ function renderLibraryDetail(entity) {
       line.textContent = warning;
       meta.append(line);
     });
+    if (!asset.error) {
+      const replace = document.createElement("button");
+      replace.type = "button";
+      replace.className = "button secondary asset-replace-button";
+      replace.textContent = asset.directional_block
+        ? "Replace only this direction"
+        : "Replace this asset";
+      replace.addEventListener("click", () => {
+        openLibraryReplacementEditor(entity, asset, footprintControl, replacementHost);
+      });
+      meta.append(replace);
+    }
+    if (!asset.error && asset.directional_block) {
+      const grouped = document.createElement("span");
+      grouped.className = "asset-group-note";
+      grouped.textContent = `Or use “Replace all ${asset.directional_block} directions” above for a complete set.`;
+      meta.append(grouped);
+    }
     card.append(preview, meta);
     grid.append(card);
   });

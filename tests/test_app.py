@@ -328,51 +328,6 @@ class SpritesheetAssistantTests(unittest.TestCase):
             "Automatic grid: 4×2, reading left-to-right then top-to-bottom",
         )
 
-    def test_uniform_frame_scale_preserves_wake_pose_sizes_and_order(self) -> None:
-        source = self.base / "wake-uniform-source.png"
-        output = self.base / "wake-uniform-output.png"
-        cell = 200
-        sheet = Image.new("RGBA", (8 * cell, cell), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(sheet)
-        source_heights = [40, 60, 80, 100, 120, 140, 160, 180]
-        colours = []
-        for index, height in enumerate(source_heights):
-            colour = (20 + index * 25, 80, 180, 255)
-            colours.append(colour)
-            left = index * cell + 70
-            draw.rectangle((left, cell - height, left + 59, cell - 1), fill=colour)
-        sheet.save(source)
-
-        normalize_uploaded_sheet(
-            source,
-            output,
-            frames=8,
-            cell=32,
-            config_overrides={
-                **self.manager.normalizer_defaults,
-                "source_cols": 8,
-                "source_rows": 1,
-                "uniform_frame_scale": True,
-                "quality_mode": "nearest",
-            },
-        )
-
-        with Image.open(output) as result:
-            rgba = result.convert("RGBA")
-            heights = []
-            sampled_colours = []
-            for index in range(8):
-                frame = rgba.crop((index * 32, 0, (index + 1) * 32, 32))
-                bbox = frame.getchannel("A").getbbox()
-                self.assertIsNotNone(bbox)
-                assert bbox is not None
-                heights.append(bbox[3] - bbox[1])
-                sampled_colours.append(frame.getpixel(((bbox[0] + bbox[2] - 1) // 2, bbox[3] - 1)))
-
-        self.assertEqual(heights, sorted(heights))
-        self.assertLess(heights[0], heights[-1] // 2)
-        self.assertEqual(sampled_colours, colours)
-
     def test_crop_pair_accepts_small_or_large_source(self) -> None:
         for draft_id, size in (("draft-crop-small", (32, 32)), ("draft-crop-large", (900, 500))):
             source = Image.new("RGBA", size, (0, 0, 0, 0))
@@ -639,11 +594,210 @@ class SpritesheetAssistantTests(unittest.TestCase):
         asset = next(item for item in entity["assets"] if item["name"] == "ogre_walk_down.png")
         self.assertFalse(any("not 64x64" in warning for warning in asset["warnings"]))
 
+    def test_library_replacement_changes_only_selected_animation_and_saves_original(self) -> None:
+        folder = self.root / "monsters" / "bandit"
+        folder.mkdir()
+        left = folder / "bandit_walk_left.png"
+        right = folder / "bandit_walk_right.png"
+        finished_strip(4).save(left)
+        original_left = left.read_bytes()
+        right_image = finished_strip(4)
+        ImageDraw.Draw(right_image).rectangle((2, 2, 8, 8), fill=(240, 20, 20, 255))
+        right_image.save(right)
+        original_right = right.read_bytes()
+
+        state = app.AppState(self.base / "replace-state", str(self.root))
+        state.drafts.source_assets_root = self.base / "source_assets"
+        state.save_library_metadata("mob", "bandit", "Bandit", "A wary cave ambusher.")
+        source = finished_strip(4, 96)
+        result = state.process_library_replacement(
+            "library-edit-bandit-left",
+            "mob",
+            "bandit",
+            "bandit_walk_left.png",
+            "1x1",
+            png_bytes(source),
+            {"mode": "auto", "sharpen": 2.0},
+        )
+        self.assertTrue(result["group"]["ready"])
+        committed = state.commit_library_replacement("library-edit-bandit-left")
+
+        self.assertEqual(committed["relative_path"], "monsters/bandit/bandit_walk_left.png")
+        self.assertNotEqual(left.read_bytes(), original_left)
+        self.assertEqual(right.read_bytes(), original_right)
+        with Image.open(left) as image:
+            self.assertEqual(image.size, (128, 32))
+        source_copy = self.base / "source_assets" / "bandit" / "bandit_walk_left.png"
+        with Image.open(source_copy) as image:
+            self.assertEqual(image.size, (384, 96))
+        entity = next(item for item in state.library_scan()["entities"] if item["name"] == "bandit")
+        self.assertEqual(entity["description"], "A wary cave ambusher.")
+        replaced = next(item for item in entity["assets"] if item["name"] == "bandit_walk_left.png")
+        self.assertEqual(replaced["processing_preset"]["quality"]["sharpen"], 2.0)
+
+    def test_library_replacement_respects_two_by_two_footprint(self) -> None:
+        folder = self.root / "monsters" / "ogre"
+        folder.mkdir()
+        target = folder / "ogre_death.png"
+        finished_strip(8).save(target)
+        state = app.AppState(self.base / "replace-2x2-state", str(self.root))
+        state.drafts.source_assets_root = self.base / "source_assets"
+        result = state.process_library_replacement(
+            "library-edit-ogre-death",
+            "mob",
+            "ogre",
+            "ogre_death.png",
+            "2x2",
+            png_bytes(separated_sheet(8)),
+            {"mode": "auto", "hard_alpha": True},
+        )
+        self.assertEqual(result["cell_size"], 64)
+        output = result["group"]["outputs"][0]
+        self.assertEqual((output["width"], output["height"]), (512, 64))
+        state.commit_library_replacement("library-edit-ogre-death")
+        with Image.open(target) as image:
+            self.assertEqual(image.size, (512, 64))
+
+    def test_library_replacement_supports_unknown_custom_animation_strip(self) -> None:
+        folder = self.root / "monsters" / "custom"
+        folder.mkdir()
+        target = folder / "custom_dance.png"
+        finished_strip(6).save(target)
+        state = app.AppState(self.base / "replace-custom-state", str(self.root))
+        state.drafts.source_assets_root = self.base / "source_assets"
+        result = state.process_library_replacement(
+            "library-edit-custom-dance",
+            "mob",
+            "custom",
+            "custom_dance.png",
+            "1x1",
+            png_bytes(separated_sheet(6, columns=3)),
+            {"mode": "auto"},
+        )
+        self.assertEqual(result["group_id"], "replace_anim_6")
+        self.assertEqual(result["expected_frames"], 6)
+        self.assertEqual(result["group"]["outputs"][0]["width"], 192)
+
+    def test_library_directional_replacement_updates_all_four_sheets_as_one_block(self) -> None:
+        folder = self.root / "monsters" / "bandit"
+        folder.mkdir()
+        directions = ("up", "right", "left", "down")
+        originals: dict[str, bytes] = {}
+        for index, direction in enumerate(directions):
+            target = folder / f"bandit_walk_{direction}.png"
+            image = finished_strip(4)
+            ImageDraw.Draw(image).rectangle((index + 1, 1, index + 4, 4), fill=(250, 20, 20, 255))
+            image.save(target)
+            originals[direction] = target.read_bytes()
+
+        state = app.AppState(self.base / "replace-walk-block-state", str(self.root))
+        state.drafts.source_assets_root = self.base / "source_assets"
+        scan = next(item for item in state.library_scan()["entities"] if item["name"] == "bandit")
+        walk_group = next(group for group in scan["replacement_groups"] if group["id"] == "walk")
+        self.assertEqual(walk_group["asset_names"], [
+            "bandit_walk_up.png",
+            "bandit_walk_right.png",
+            "bandit_walk_left.png",
+            "bandit_walk_down.png",
+        ])
+
+        result = state.process_library_replacement(
+            "library-edit-bandit-walk-block",
+            "mob",
+            "bandit",
+            "bandit_walk_up.png",
+            "1x1",
+            png_bytes(separated_sheet(16)),
+            {"mode": "auto", "sharpen": 1.75},
+            "walk",
+        )
+        self.assertEqual(result["group_id"], "replace_block_walk")
+        self.assertEqual(result["expected_frames"], 16)
+        self.assertEqual(len(result["group"]["outputs"]), 4)
+        committed = state.commit_library_replacement("library-edit-bandit-walk-block")
+        self.assertEqual(committed["asset_count"], 4)
+        self.assertEqual(committed["action_group"], "walk")
+        for direction in directions:
+            target = folder / f"bandit_walk_{direction}.png"
+            self.assertNotEqual(target.read_bytes(), originals[direction])
+            with Image.open(target) as image:
+                self.assertEqual(image.size, (128, 32))
+        with Image.open(self.base / "source_assets" / "bandit" / "bandit_walk.png") as image:
+            self.assertEqual(image.size, separated_sheet(16).size)
+
+        refreshed = next(item for item in state.library_scan()["entities"] if item["name"] == "bandit")
+        for asset in refreshed["assets"]:
+            if asset["name"] in walk_group["asset_names"]:
+                self.assertEqual(asset["processing_preset"]["quality"]["sharpen"], 1.75)
+
+    def test_incomplete_directional_set_is_not_offered_as_a_block(self) -> None:
+        folder = self.root / "monsters" / "partial"
+        folder.mkdir()
+        for direction in ("up", "right", "left"):
+            finished_strip(4).save(folder / f"partial_walk_{direction}.png")
+        state = app.AppState(self.base / "partial-block-state", str(self.root))
+        entity = next(item for item in state.library_scan()["entities"] if item["name"] == "partial")
+        self.assertFalse(any(group["id"] == "walk" for group in entity["replacement_groups"]))
+        with self.assertRaises(app.AppError):
+            state.process_library_replacement(
+                "library-edit-partial-walk",
+                "mob",
+                "partial",
+                "partial_walk_up.png",
+                "1x1",
+                png_bytes(separated_sheet(16)),
+                {"mode": "auto"},
+                "walk",
+            )
+
+    def test_sprite_library_ui_exposes_grouped_and_standalone_editor_controls(self) -> None:
+        script = (app.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+        styles = (app.STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("Replace this asset", script)
+        self.assertIn("Replace only this direction", script)
+        self.assertIn("Or use “Replace all ${asset.directional_block} directions” above for a complete set.", script)
+        self.assertIn("Replace directional animation blocks", script)
+        self.assertIn("Replace all ${directionalGroup.id} directions", script)
+        self.assertIn("All ${view.targetNames.length} directional PNGs will be replaced together.", script)
+        self.assertIn("/api/library/replacement/upload", script)
+        self.assertIn("/api/library/replacement/reprocess", script)
+        self.assertIn("/api/library/replacement/commit", script)
+        self.assertIn("library-replacement-card", styles)
+
+    def test_directional_assets_keep_individual_replacement_path(self) -> None:
+        folder = self.root / "monsters" / "bandit"
+        folder.mkdir()
+        for direction in ("up", "right", "left", "down"):
+            finished_strip(4).save(folder / f"bandit_walk_{direction}.png")
+        state = app.AppState(self.base / "individual-direction-state", str(self.root))
+        before_right = (folder / "bandit_walk_right.png").read_bytes()
+        result = state.process_library_replacement(
+            "library-edit-bandit-walk-left-only",
+            "mob",
+            "bandit",
+            "bandit_walk_left.png",
+            "1x1",
+            png_bytes(separated_sheet(4)),
+            {"mode": "auto"},
+        )
+        self.assertEqual(result["expected_frames"], 4)
+        committed = state.commit_library_replacement("library-edit-bandit-walk-left-only")
+        self.assertEqual(committed["asset_count"], 1)
+        self.assertEqual([record["asset"] for record in committed["assets"]], ["bandit_walk_left.png"])
+        self.assertEqual((folder / "bandit_walk_right.png").read_bytes(), before_right)
+
     def test_slug_rejects_paths_and_windows_names(self) -> None:
         for value in ("../bandit", "Bandit", "con", "a/b"):
             with self.assertRaises(app.AppError):
                 app.validate_slug(value)
         self.assertEqual(app.validate_slug("bandit_elite-2"), "bandit_elite-2")
+
+    def test_creation_original_preview_has_large_stage(self) -> None:
+        styles = (app.STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+        self.assertIn(".preview-stage.original canvas { width: min(512px, 100%); }", styles)
+        self.assertIn(".preview-stage.original img { width: min(512px, 100%); max-height: 512px; }", styles)
+        self.assertIn("minmax(min(680px, 100%), 1fr)", styles)
+        self.assertIn(".preview-stage.actual canvas { width: 32px; height: 32px; }", styles)
 
 
 if __name__ == "__main__":

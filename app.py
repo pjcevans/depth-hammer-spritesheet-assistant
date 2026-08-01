@@ -38,7 +38,7 @@ from normalize_anim import (
 )
 
 
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.4.2"
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 CONFIG_DIR = APP_DIR / "config"
@@ -207,6 +207,113 @@ class ProfileCatalog:
         self.data = data
         self.profiles: dict[str, dict[str, Any]] = profiles
         self._validate()
+        self.hidden_profiles = self._replacement_profiles(self.profiles)
+
+    @staticmethod
+    def _replacement_profiles(profiles: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Private one-output profiles used by the Sprite Library editor.
+
+        They deliberately stay out of public_data(), so New Monster/New Player
+        remain driven only by sprite_profiles.json.
+        """
+
+        groups: list[dict[str, Any]] = [
+            {
+                "id": "replace_small",
+                "label": "Replacement game sprite",
+                "prompt_key": "base",
+                "mode": "crop_pair",
+                "source_frames": 1,
+                "outputs": [{
+                    "suffix": ".png",
+                    "frames": 1,
+                    "start": 0,
+                    "frame_ms": 500,
+                    "size": [32, 32],
+                    "footprint_scaled": True,
+                }],
+            },
+            {
+                "id": "replace_large",
+                "label": "Replacement examine image",
+                "prompt_key": "base",
+                "mode": "crop_pair",
+                "source_frames": 1,
+                "outputs": [{
+                    "suffix": "_large.png",
+                    "frames": 1,
+                    "start": 0,
+                    "frame_ms": 500,
+                    "size": [256, 256],
+                }],
+            },
+            {
+                "id": "replace_passthrough",
+                "label": "Replacement image",
+                "prompt_key": "base",
+                "mode": "passthrough",
+                "minimum_size": [1, 1],
+                "source_frames": 1,
+                "outputs": [{
+                    "suffix": ".png",
+                    "frames": 1,
+                    "start": 0,
+                    "frame_ms": 500,
+                }],
+            },
+        ]
+        for frames in range(2, 33):
+            factors = [
+                (columns, frames // columns)
+                for columns in range(1, frames + 1)
+                if frames % columns == 0
+            ]
+            columns, rows = min(
+                factors,
+                key=lambda pair: (abs(pair[0] - pair[1]), abs(pair[0] - 4)),
+            )
+            groups.append({
+                "id": f"replace_anim_{frames}",
+                "label": f"Replacement {frames}-frame animation",
+                "prompt_key": "walk",
+                "mode": "normalize",
+                "source_frames": frames,
+                "grid_hint": [columns, rows],
+                "prefer_grid_reading_order": True,
+                "outputs": [{
+                    "suffix": ".png",
+                    "frames": frames,
+                    "start": 0,
+                    "frame_ms": 170,
+                }],
+            })
+        # Directional animations are edited as the same combined blocks used
+        # during creation.  The hidden IDs are shared between mob/player when
+        # their definitions match, while player-only actions add their own
+        # groups here.
+        directional_ids: set[str] = set()
+        for profile in profiles.values():
+            for source_group in profile.get("groups", []):
+                if source_group.get("mode") != "normalize_split" or len(source_group.get("outputs", [])) < 2:
+                    continue
+                action_id = str(source_group["id"])
+                if action_id in directional_ids:
+                    continue
+                directional_ids.add(action_id)
+                groups.append({
+                    **source_group,
+                    "id": f"replace_block_{action_id}",
+                    "label": f"Replacement {source_group['label']}",
+                    "prefer_grid_reading_order": True,
+                })
+        return {
+            "__library__": {
+                "label": "Sprite Library replacement",
+                "folder": "",
+                "subject": "existing sprite",
+                "groups": groups,
+            }
+        }
 
     def _validate(self) -> None:
         for profile_key, profile in self.profiles.items():
@@ -263,7 +370,7 @@ class ProfileCatalog:
 
     def profile(self, key: str) -> dict[str, Any]:
         try:
-            return self.profiles[key]
+            return self.profiles.get(key) or self.hidden_profiles[key]
         except KeyError as exc:
             raise AppError(f"Unknown profile: {key}") from exc
 
@@ -748,6 +855,11 @@ class DraftManager:
         subject = source.crop(bbox)
         large_spec = max(group["outputs"], key=lambda item: int(item["size"][0]) * int(item["size"][1]))
         large_size = (int(large_spec["size"][0]), int(large_spec["size"][1]))
+        # A single base-sprite replacement still needs a full working canvas;
+        # otherwise the crop would be drawn straight at 32/64px and bypass the
+        # normalizer's quality controls.
+        if all(bool(spec.get("footprint_scaled", False)) for spec in group["outputs"]):
+            large_size = (max(256, large_size[0]), max(256, large_size[1]))
         zoom = float(crop["zoom"])
         scale = 0.9 * min(large_size[0] / subject.width, large_size[1] / subject.height) * zoom
         scaled_size = (max(1, round(subject.width * scale)), max(1, round(subject.height * scale)))
@@ -1380,6 +1492,9 @@ def scan_sprite_library(
                 saved_details = {}
             saved_name = saved_details.get("name", "")
             saved_description = saved_details.get("description", "")
+            asset_settings = saved_details.get("asset_settings", {})
+            if not isinstance(asset_settings, dict):
+                asset_settings = {}
             if not isinstance(saved_name, str):
                 saved_name = ""
             if not isinstance(saved_description, str):
@@ -1437,9 +1552,50 @@ def scan_sprite_library(
                         "frame_ms": int(spec.get("frame_ms", 170)),
                         "animated": animated,
                         "warnings": warnings,
+                        "group_id": spec.get("group_id"),
+                        "group_mode": spec.get("mode", "unknown"),
+                        "footprint_scaled": bool(spec.get("footprint_scaled", False)),
+                        "processing_preset": (
+                            asset_settings.get(path.name, {})
+                            if isinstance(asset_settings.get(path.name, {}), dict)
+                            else {}
+                        ),
+                        "version": path.stat().st_mtime_ns,
                     })
                 except AppError as exc:
                     assets.append({"name": path.name, "error": str(exc), "relative_path": path.relative_to(root).as_posix()})
+            asset_names = {str(asset.get("name", "")).casefold() for asset in assets if not asset.get("error")}
+            replacement_groups: list[dict[str, Any]] = []
+            for group in profile["groups"]:
+                if group.get("mode") != "normalize_split" or len(group.get("outputs", [])) < 2:
+                    continue
+                target_names = [f"{entity_dir.name}{output['suffix']}" for output in group["outputs"]]
+                if not all(name.casefold() in asset_names for name in target_names):
+                    continue
+                preset: dict[str, Any] = {}
+                for name in target_names:
+                    candidate = asset_settings.get(name, {})
+                    if isinstance(candidate, dict) and candidate:
+                        preset = candidate
+                        break
+                replacement_groups.append({
+                    "id": group["id"],
+                    "label": group["label"],
+                    "source_frames": int(group["source_frames"]),
+                    "grid_hint": group.get("grid_hint", [4, 4]),
+                    "asset_names": target_names,
+                    "processing_preset": preset,
+                })
+            for asset in assets:
+                asset["directional_block"] = next(
+                    (
+                        replacement_group["id"]
+                        for replacement_group in replacement_groups
+                        if str(asset.get("name", "")).casefold()
+                        in {name.casefold() for name in replacement_group["asset_names"]}
+                    ),
+                    None,
+                )
             entities.append({
                 "profile": profile_key,
                 "profile_label": profile["label"],
@@ -1449,9 +1605,12 @@ def scan_sprite_library(
                 "description": saved_description,
                 "footprint": footprint,
                 "cell_size": expected_cell_size,
-                "metadata_present": bool(saved_name or saved_description or footprint != "1x1"),
+                "metadata_present": bool(
+                    saved_name or saved_description or footprint != "1x1" or asset_settings
+                ),
                 "relative_path": entity_dir.relative_to(root).as_posix(),
                 "assets": assets,
+                "replacement_groups": replacement_groups,
                 "asset_count": len(assets),
             })
     return {"root": str(root), "available": True, "entities": entities, "errors": errors}
@@ -1545,7 +1704,11 @@ class AppState:
         with self.lock:
             metadata = load_library_metadata(self.sprites_root)
             key = f"{profile_key}/{folder}"
+            prior = metadata.setdefault("entities", {}).get(key, {})
+            if not isinstance(prior, dict):
+                prior = {}
             record = {
+                **prior,
                 "profile": profile_key,
                 "folder": folder,
                 "name": name,
@@ -1553,9 +1716,311 @@ class AppState:
                 "footprint": footprint,
                 "updated_at": int(time.time()),
             }
-            metadata.setdefault("entities", {})[key] = record
+            metadata["entities"][key] = record
             atomic_write_json(self.sprites_root / LIBRARY_METADATA_FILENAME, metadata)
             return record
+
+    def _library_target(
+        self,
+        profile_key: str,
+        folder: str,
+        asset_name: str,
+    ) -> tuple[Path, dict[str, Any], str]:
+        profile = self.catalog.profile(profile_key)
+        if profile_key not in {"mob", "player"}:
+            raise AppError("Only monster and player sprites can be edited.")
+        if not isinstance(folder, str) or Path(folder).name != folder or not folder:
+            raise AppError("Invalid sprite folder name.")
+        if (
+            not isinstance(asset_name, str)
+            or Path(asset_name).name != asset_name
+            or not asset_name.casefold().endswith(".png")
+        ):
+            raise AppError("Invalid sprite asset name.")
+        profile_root = (self.sprites_root / str(profile["folder"])).resolve()
+        entity_dir = (profile_root / folder).resolve()
+        target = (entity_dir / asset_name).resolve()
+        if (
+            not is_within(entity_dir, profile_root)
+            or not entity_dir.is_dir()
+            or not is_within(target, entity_dir)
+            or not target.is_file()
+        ):
+            raise AppError("That sprite asset no longer exists.", 404)
+        specs = self.catalog.all_output_specs(profile_key)
+        spec = infer_asset_spec(asset_name, folder, specs)
+        if spec.get("mode") == "unknown":
+            width, height, _mode = png_dimensions(target)
+            if height > 0 and width > height and width % height == 0:
+                inferred_frames = width // height
+                if 2 <= inferred_frames <= 32:
+                    spec = {
+                        **spec,
+                        "frames": inferred_frames,
+                        "frame_ms": 180,
+                    }
+        frames = max(1, int(spec.get("frames", 1)))
+        if frames > 32:
+            raise AppError("The Library editor supports up to 32 frames per replacement sheet.")
+        if frames > 1:
+            replacement_group = f"replace_anim_{frames}"
+        elif bool(spec.get("footprint_scaled", False)):
+            replacement_group = "replace_small"
+        elif str(spec.get("suffix", "")).casefold() == "_large.png":
+            replacement_group = "replace_large"
+        else:
+            replacement_group = "replace_passthrough"
+        return target, spec, replacement_group
+
+    def _library_replacement_targets(
+        self,
+        profile_key: str,
+        folder: str,
+        asset_name: str,
+        action_group: str = "",
+    ) -> tuple[list[tuple[Path, dict[str, Any], str]], str, str]:
+        if not action_group:
+            target, spec, replacement_group = self._library_target(profile_key, folder, asset_name)
+            return [(target, spec, asset_name)], replacement_group, ""
+
+        profile = self.catalog.profile(profile_key)
+        try:
+            source_group = next(group for group in profile["groups"] if group["id"] == action_group)
+        except StopIteration as exc:
+            raise AppError("That directional animation group does not exist.") from exc
+        if source_group.get("mode") != "normalize_split" or len(source_group.get("outputs", [])) < 2:
+            raise AppError("Only directional animation blocks can be replaced as a group.")
+
+        targets: list[tuple[Path, dict[str, Any], str]] = []
+        for output in source_group["outputs"]:
+            name = f"{folder}{output['suffix']}"
+            target, spec, _single_group = self._library_target(profile_key, folder, name)
+            if spec.get("group_id") != action_group:
+                raise AppError("The directional replacement no longer matches its sprite profile.")
+            targets.append((target, spec, name))
+        return targets, f"replace_block_{action_group}", action_group
+
+    def process_library_replacement(
+        self,
+        edit_id: str,
+        profile_key: str,
+        folder: str,
+        asset_name: str,
+        footprint: Any,
+        data: bytes,
+        processing: Optional[dict[str, Any]],
+        action_group: str = "",
+    ) -> dict[str, Any]:
+        targets, group_id, action_group = self._library_replacement_targets(
+            profile_key, folder, asset_name, action_group
+        )
+        footprint = validate_footprint(footprint)
+        with self.lock:
+            metadata = self.drafts.load(edit_id, "__library__")
+            binding = {
+                "profile": profile_key,
+                "folder": folder,
+                "asset": asset_name,
+                "group": group_id,
+                "action_group": action_group,
+            }
+            if metadata.get("replacement_target") not in (None, binding):
+                self.drafts.reset(edit_id)
+                metadata = self.drafts.load(edit_id, "__library__")
+            metadata["footprint"] = footprint
+            metadata["replacement_target"] = binding
+            self.drafts.save(edit_id, metadata)
+            status = self.drafts.process_upload(
+                edit_id,
+                "__library__",
+                group_id,
+                data,
+                processing,
+            )
+        saved = status.get("groups", {}).get(group_id, {})
+        return {
+            "edit_id": edit_id,
+            "target": binding,
+            "footprint": footprint,
+            "cell_size": footprint_cell_size(footprint),
+            "group_id": group_id,
+            "group": saved,
+            "current_sizes": [list(png_dimensions(target)[:2]) for target, _spec, _name in targets],
+            "expected_frames": int(self.catalog.group("__library__", group_id).get("source_frames", 1)),
+        }
+
+    def reprocess_library_replacement(
+        self,
+        edit_id: str,
+        footprint: Any,
+        processing: Optional[dict[str, Any]],
+    ) -> dict[str, Any]:
+        footprint = validate_footprint(footprint)
+        with self.lock:
+            metadata = self.drafts.load(edit_id, "__library__")
+            binding = metadata.get("replacement_target")
+            if not isinstance(binding, dict):
+                raise AppError("Choose and upload a replacement image first.")
+            targets, expected_group, action_group = self._library_replacement_targets(
+                str(binding.get("profile", "")),
+                str(binding.get("folder", "")),
+                str(binding.get("asset", "")),
+                str(binding.get("action_group", "")),
+            )
+            group_id = str(binding.get("group", ""))
+            if group_id != expected_group:
+                raise AppError("The replacement target no longer matches its sprite profile.")
+            metadata["footprint"] = footprint
+            self.drafts.save(edit_id, metadata)
+            status = self.drafts.reprocess(
+                edit_id,
+                "__library__",
+                group_id,
+                processing,
+            )
+        return {
+            "edit_id": edit_id,
+            "target": binding,
+            "footprint": footprint,
+            "cell_size": footprint_cell_size(footprint),
+            "group_id": group_id,
+            "group": status.get("groups", {}).get(group_id, {}),
+            "current_sizes": [list(png_dimensions(target)[:2]) for target, _spec, _name in targets],
+            "expected_frames": int(self.catalog.group("__library__", group_id).get("source_frames", 1)),
+        }
+
+    def commit_library_replacement(self, edit_id: str) -> dict[str, Any]:
+        with self.lock:
+            metadata = self.drafts.load(edit_id, "__library__")
+            binding = metadata.get("replacement_target")
+            if not isinstance(binding, dict):
+                raise AppError("No Library replacement is ready.")
+            profile_key = str(binding.get("profile", ""))
+            folder = str(binding.get("folder", ""))
+            asset_name = str(binding.get("asset", ""))
+            targets, expected_group, action_group = self._library_replacement_targets(
+                profile_key, folder, asset_name, str(binding.get("action_group", ""))
+            )
+            group_id = str(binding.get("group", ""))
+            if group_id != expected_group:
+                raise AppError("The replacement target no longer matches its sprite profile.")
+            saved = metadata.get("groups", {}).get(group_id, {})
+            records = saved.get("outputs", []) if isinstance(saved, dict) else []
+            if not saved.get("ready") or len(records) != len(targets):
+                raise AppError("Process a valid replacement before applying it.")
+            processed_files = [
+                self.drafts.processed_file(edit_id, str(record.get("stored_name", "")))
+                for record in records
+            ]
+            raw = self.drafts.raw_file(edit_id, "__library__", group_id)
+            group = self.catalog.group("__library__", group_id)
+            cell_size = footprint_cell_size(metadata.get("footprint", "1x1"))
+            for processed, output_spec in zip(processed_files, group["outputs"]):
+                validate_finished_png(processed, output_spec, group, cell_size)
+
+            source_root = self.drafts.source_assets_root.resolve()
+            source_dir = (source_root / folder).resolve()
+            if not is_within(source_dir, source_root):
+                raise AppError("Invalid source asset destination.")
+            source_dir.mkdir(parents=True, exist_ok=True)
+            source_name = f"{folder}_{action_group}.png" if action_group else asset_name
+            source_target = (source_dir / source_name).resolve()
+            if not is_within(source_target, source_dir):
+                raise AppError("Invalid source asset destination.")
+
+            game_temps = [
+                target.with_name(f".{target.name}.{uuid.uuid4().hex}.replacement")
+                for target, _spec, _name in targets
+            ]
+            source_temp = source_target.with_name(f".{source_target.name}.{uuid.uuid4().hex}.replacement")
+            game_backups = [
+                target.with_name(f".{target.name}.{uuid.uuid4().hex}.backup")
+                for target, _spec, _name in targets
+            ]
+            source_backup = source_target.with_name(f".{source_target.name}.{uuid.uuid4().hex}.backup")
+            source_existed = source_target.exists()
+            try:
+                for processed, game_temp in zip(processed_files, game_temps):
+                    shutil.copy2(processed, game_temp)
+                shutil.copy2(raw, source_temp)
+                for game_temp in game_temps:
+                    with Image.open(game_temp) as image:
+                        image.verify()
+                with Image.open(source_temp) as image:
+                    image.verify()
+                for (target, _spec, _name), game_backup in zip(targets, game_backups):
+                    shutil.copy2(target, game_backup)
+                if source_existed:
+                    shutil.copy2(source_target, source_backup)
+                os.replace(source_temp, source_target)
+                for game_temp, (target, _spec, _name) in zip(game_temps, targets):
+                    os.replace(game_temp, target)
+            except Exception:
+                for game_backup, (target, _spec, _name) in zip(game_backups, targets):
+                    if game_backup.exists():
+                        os.replace(game_backup, target)
+                if source_backup.exists():
+                    os.replace(source_backup, source_target)
+                elif not source_existed:
+                    source_target.unlink(missing_ok=True)
+                raise
+            finally:
+                for temporary in (*game_temps, source_temp, *game_backups, source_backup):
+                    temporary.unlink(missing_ok=True)
+
+            library_metadata = load_library_metadata(self.sprites_root)
+            key = f"{profile_key}/{folder}"
+            record = library_metadata.setdefault("entities", {}).get(key, {})
+            if not isinstance(record, dict):
+                record = {}
+            settings_record: dict[str, Any] = {
+                "preset": "custom",
+                "quality": saved.get("quality", {}),
+            }
+            if group["mode"] == "crop_pair":
+                settings_record["crop"] = saved.get("crop", {})
+            elif group["mode"] != "passthrough":
+                settings_record["detection"] = saved.get("settings", {})
+            asset_settings = record.get("asset_settings", {})
+            if not isinstance(asset_settings, dict):
+                asset_settings = {}
+            for _target, _spec, name in targets:
+                asset_settings[name] = settings_record
+            record.update({
+                "profile": profile_key,
+                "folder": folder,
+                "footprint": validate_footprint(metadata.get("footprint", "1x1")),
+                "asset_settings": asset_settings,
+                "updated_at": int(time.time()),
+            })
+            library_metadata["entities"][key] = record
+            atomic_write_json(self.sprites_root / LIBRARY_METADATA_FILENAME, library_metadata)
+
+            committed_assets = []
+            for target, spec, name in targets:
+                width, height, _mode = png_dimensions(target)
+                committed_assets.append({
+                    "asset": name,
+                    "relative_path": target.relative_to(self.sprites_root).as_posix(),
+                    "width": width,
+                    "height": height,
+                    "frames": int(spec.get("frames", 1)),
+                    "version": target.stat().st_mtime_ns,
+                })
+            try:
+                source_relative = source_target.relative_to(APP_DIR).as_posix()
+            except ValueError:
+                source_relative = str(source_target)
+            return {
+                "ok": True,
+                "relative_path": committed_assets[0]["relative_path"],
+                "relative_paths": [item["relative_path"] for item in committed_assets],
+                "source_relative_path": source_relative,
+                "asset_count": len(committed_assets),
+                "assets": committed_assets,
+                "asset": committed_assets[0]["asset"],
+                "action_group": action_group,
+            }
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -1746,6 +2211,18 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self._one("draft"), self._one("profile"), self._one("group"), self._read_body(), self._processing_query()
                 )
                 self._send_json({"ok": True, **result})
+            elif path == "/api/library/replacement/upload":
+                result = state.process_library_replacement(
+                    self._one("edit"),
+                    self._one("profile"),
+                    self._one("folder"),
+                    self._one("asset"),
+                    self._one("footprint", "1x1"),
+                    self._read_body(),
+                    self._processing_query(),
+                    self._one("group", ""),
+                )
+                self._send_json({"ok": True, **result})
             elif path == "/api/reprocess":
                 body = self._read_json_body()
                 result = state.drafts.reprocess(
@@ -1755,6 +2232,17 @@ class RequestHandler(BaseHTTPRequestHandler):
                     body.get("processing") if isinstance(body.get("processing"), dict) else {},
                 )
                 self._send_json({"ok": True, **result})
+            elif path == "/api/library/replacement/reprocess":
+                body = self._read_json_body()
+                result = state.reprocess_library_replacement(
+                    str(body.get("edit", "")),
+                    body.get("footprint", "1x1"),
+                    body.get("processing") if isinstance(body.get("processing"), dict) else {},
+                )
+                self._send_json({"ok": True, **result})
+            elif path == "/api/library/replacement/commit":
+                body = self._read_json_body()
+                self._send_json(state.commit_library_replacement(str(body.get("edit", ""))))
             elif path == "/api/draft/identity":
                 body = self._read_json_body()
                 result = state.drafts.save_identity(
