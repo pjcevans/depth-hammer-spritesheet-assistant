@@ -6,7 +6,7 @@ A local browser interface backed by Python. It browses existing player and monst
 
 1. Extract the complete `depth-hammer-spritesheet-assistant` folder beside the `depth-hammer` repository.
 2. Double-click `run_spritesheet_assistant.bat`.
-3. The first run creates a private `.venv` and installs Pillow and NumPy. Later runs start immediately.
+3. The first run creates a private `.venv` and installs Pillow and NumPy. Later runs start immediately. After a Python reinstall, the launcher automatically preserves an unusable environment in `.venv-backup-*` and creates a fresh one.
 4. Chrome opens automatically. Keep the launcher window open while using the app.
 
 The recommended layout is:
@@ -85,7 +85,7 @@ Uploads, crop settings, detection settings, quality presets, name, folder, descr
 - **Wrong number of frames detected:** leave detection on **Automatic** first. For an evenly arranged sheet, choose **Fixed grid** and set columns × rows to the required count. Connected-sprite controls remain available for unusually spaced sheets.
 - **Transparent background required:** remove any solid or checkerboard background from the uploaded PNG.
 - **Sprites root not found:** set it explicitly in **Settings**.
-- **First-run installation failed:** delete `.venv`, check Python and internet access, then run the batch file again.
+- **First-run installation failed:** check Python and internet access, then run the batch file again. Missing dependencies are retried automatically. Git Bash users can run `sh run_spritesheet_assistant.sh`; it uses the Windows launcher and does not depend on interactive Bash aliases.
 - **Port already occupied:** the app automatically tries the next available local port.
 
 To run the automated checks from the app folder:

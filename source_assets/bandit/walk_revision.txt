@@ -1,0 +1,11 @@
+﻿Bandit horizontal walk revision — 2026-10-08
+Generated using the built-in imagegen tool, referencing original walk strips and bandit_large.png.
+Prompt specification: preserve the charcoal hood, face wrap, tunic, brown belt and boots, tan forearms and gritty pixel style. Four sequential phases per direction: near-leg contact, far-leg passing with raised foot, far-leg contact, near-leg passing with raised foot. Keep the head and torso facing consistently left/right; subtle opposing arms; readable extended-leg gaps. Transparent background; four evenly spaced full-body sprites in one row; no weapons, text, grid or ground shadow.
+Original full-resolution generated PNGs are source_assets/bandit/bandit_walk_left.png and bandit_walk_right.png.
+Normalize each with the assistant's normalize_anim.py:
+python normalize_anim.py source_assets/bandit/bandit_walk_left.png --out workspace/bandit-walk-review/bandit_walk_left.png --frames 4 --cell 32 --source-cols 4 --source-rows 1 --fit --quality-mode max --fit-padding 0 --alpha-threshold 128
+Use identical options for right. Alpha threshold excludes faint generated edge noise from crop bounds.
+Game destination: ../depth-hammer/assets/entity_sprites/default/monsters/bandit/
+The assistant Library reads this game directory directly. No assistant code change needed.
+Before images and animated comparison: workspace/bandit-walk-review/preview.html
+Image dimensions/transparency/frame content checked. Godot and tests not run per game repository instructions.
