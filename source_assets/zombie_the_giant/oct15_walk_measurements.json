@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_the_giant_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      31,
+      32
+    ],
+    "scale": 0.09090909090909091,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_the_giant_walk_left.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09329446064139942,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_the_giant_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09302325581395349,
+    "fixed_box": null
+  }
+]

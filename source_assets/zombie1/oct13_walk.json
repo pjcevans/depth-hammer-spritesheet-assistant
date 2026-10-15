@@ -1,0 +1,1 @@
+{"name":"zombie1","source":"oct13_walk.png","rows":1,"jobs":[{"action":"walk","direction":"right","row":0,"mirror":true}]}

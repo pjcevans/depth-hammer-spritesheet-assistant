@@ -1,0 +1,1 @@
+{"name":"zombie_eno","source":"oct14_walk.png","rows":3,"jobs":[{"action":"walk","direction":"up","row":0},{"action":"walk","direction":"right","row":1,"mirror":true},{"action":"walk","direction":"down","row":2}]}

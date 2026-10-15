@@ -1,0 +1,15 @@
+{
+  "zombie_in_green.png": "d4fddb1f6b38655aefd4a3ee5684c15df17f23532897f1c7eb49af573d8de550",
+  "zombie_in_green_death.png": "a2306c7f82c36b8258e421046549545ccbe32cd2d0531baaa33b9d633838a62e",
+  "zombie_in_green_deathfire.png": "c4ca2450dec88c22e7ecdedac6b67c8d5f14d9b4cabc76888e9ab658517bd4bc",
+  "zombie_in_green_large.png": "6c6dac5cb34ad75238d0713da2603fc2e41bd7f5cc7df0a2c88e4df4fa3f00ee",
+  "zombie_in_green_melee_down.png": "85bef8f7dec330b2bc713ed7f0f81a529ede58a3a5514f28a5a1b26661e054d8",
+  "zombie_in_green_melee_left.png": "c8129e0c9a9a88018364a4f21cec3693a8889b0208f233147610b4e3caef6272",
+  "zombie_in_green_melee_right.png": "7e4f1528941a6d88e310b23195cbfb899afc93335b5d76ba6dfdc236b258d4b3",
+  "zombie_in_green_melee_up.png": "ef798263ce03196aeafb9b5035bd7cef9437eed07858001cb335387b57e1f2e0",
+  "zombie_in_green_wake.png": "fc5a8dec66763b7b569a35535357b984c8db9a5f5f2cd113498ac1d2e28ca791",
+  "zombie_in_green_walk_down.png": "0d28dbcf1993f6f2ba1122b53e44aeaa810ba87c8d6072b45a955d26e9c477e2",
+  "zombie_in_green_walk_left.png": "c0b28d1c044ce7828199cd7d3beb775bfa62a90fd821c96f0b250584d62e0f3f",
+  "zombie_in_green_walk_right.png": "79bd44eb566ca3538a1b9a814ee6699d5adb7738d527df9202016dfc3173753c",
+  "zombie_in_green_walk_up.png": "c4ff66771972013980a07b0b06a2c87df14176cd491ee3c9b3a70c0ecfae862f"
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "file": "zombie_wrestler_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.04783258594917788,
+    "fixed_box": null
+  }
+]

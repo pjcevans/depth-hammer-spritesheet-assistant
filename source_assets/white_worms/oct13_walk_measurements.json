@@ -1,0 +1,47 @@
+[
+  {
+    "file": "white_worms_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      27,
+      27,
+      27,
+      27
+    ],
+    "scale": 0.10561056105610561,
+    "fixed_box": [
+      27,
+      27
+    ]
+  },
+  {
+    "file": "white_worms_walk_right.png",
+    "target": 26.0,
+    "actual": [
+      27,
+      27,
+      27,
+      27
+    ],
+    "scale": 0.09106830122591944,
+    "fixed_box": [
+      27,
+      27
+    ]
+  },
+  {
+    "file": "white_worms_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      27,
+      27,
+      27,
+      27
+    ],
+    "scale": 0.10355987055016182,
+    "fixed_box": [
+      27,
+      27
+    ]
+  }
+]

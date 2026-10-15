@@ -1,0 +1,15 @@
+{
+  "zombie_captain.png": "ac4d331e5dc3030f47011e3c3df25457aa5ec7fcb786cf929973f13d77457399",
+  "zombie_captain_death.png": "841c7dbb045979129d5313ccf4981c1aecf28ea5fec2e48cdcb3d57f77ee7985",
+  "zombie_captain_deathfire.png": "fdaa2029122cf749e883306aef9e3198c6b50415a7c0f936735714ae54d912c8",
+  "zombie_captain_large.png": "0c6b65c53680e8fd80c2f10bcc2ebb17ff9f39946b316b8526d1d62807b6c426",
+  "zombie_captain_melee_down.png": "c6201c8751d3720b077fba6f74a12b8483db65578bb4fd47ec993622f941cc9a",
+  "zombie_captain_melee_left.png": "68d1ebc8ea0a649971020f82af3b1881a8835ded4fc57ec5a490615e9556255d",
+  "zombie_captain_melee_right.png": "c4f227bd247db21a78df76c82f62dd652393168e6332203cefec35247c080ebf",
+  "zombie_captain_melee_up.png": "6588046a607435b549ab82e783db2cc7f2ffcbc92b5e87c515e0dc595d7d1c34",
+  "zombie_captain_wake.png": "78f24d93b7a8fae85975d60105ea9c6b76a5d37544c808b51f1fb1925fe067c6",
+  "zombie_captain_walk_down.png": "7f2c015906d0d3d6ed30a52d11d41dff2241732e9895b12ee5efc16f69b3e9b9",
+  "zombie_captain_walk_left.png": "1fa9a5c83dd9021f434ea2365b322da7c2f9511a999f9957a9a7551af0d2a760",
+  "zombie_captain_walk_right.png": "d69ff5126cd71f4038566cebd5adc111b59fcd4d5f8779feb624d6124305657b",
+  "zombie_captain_walk_up.png": "0a1ed3a25ede9a1b4e33162dc6063cae9e8ae24012faf2d676442ac741bbb7aa"
+}

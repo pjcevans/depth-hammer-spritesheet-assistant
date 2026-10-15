@@ -1,0 +1,35 @@
+{
+  "name": "white_worms",
+  "source": "oct13_walk.png",
+  "rows": 3,
+  "jobs": [
+    {
+      "action": "walk",
+      "direction": "up",
+      "row": 0,
+      "fixed_box": [
+        27,
+        27
+      ]
+    },
+    {
+      "action": "walk",
+      "direction": "right",
+      "row": 1,
+      "mirror": true,
+      "fixed_box": [
+        27,
+        27
+      ]
+    },
+    {
+      "action": "walk",
+      "direction": "down",
+      "row": 2,
+      "fixed_box": [
+        27,
+        27
+      ]
+    }
+  ]
+}

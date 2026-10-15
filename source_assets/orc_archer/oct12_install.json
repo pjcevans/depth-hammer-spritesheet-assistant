@@ -1,0 +1,11 @@
+{
+    "name":  "orc_archer",
+    "action":  "walk",
+    "directions":  [
+                       "right"
+                   ],
+    "source":  "orc_archer_walk_right_reworked_oct12.png",
+    "reference":  "walk",
+    "mirror":  true,
+    "alpha_threshold":  128
+}

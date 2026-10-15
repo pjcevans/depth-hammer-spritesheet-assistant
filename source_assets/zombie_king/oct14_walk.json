@@ -1,0 +1,1 @@
+{"name":"zombie_king","source":"oct14_walk_separated.png","rows":4,"jobs":[{"action":"walk","direction":"up","row":0},{"action":"walk","direction":"right","row":2,"mirror":true},{"action":"walk","direction":"down","row":3}]}

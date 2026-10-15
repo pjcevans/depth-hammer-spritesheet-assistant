@@ -1,0 +1,1 @@
+{"name":"wolf","source":"oct13_walk_melee.png","rows":4,"jobs":[{"action":"melee","direction":"up","row":0},{"action":"melee","direction":"left","row":1,"mirror":true,"axis":"width"},{"action":"melee","direction":"down","row":2},{"action":"walk","direction":"down","row":3}]}

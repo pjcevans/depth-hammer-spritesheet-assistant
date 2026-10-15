@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_bowler_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09580838323353294,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_bowler_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09580838323353294,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_bowler_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0927536231884058,
+    "fixed_box": null
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_king_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      31,
+      32,
+      32
+    ],
+    "scale": 0.10423452768729642,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_king_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.11228070175438597,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_king_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      31,
+      32,
+      32
+    ],
+    "scale": 0.10491803278688525,
+    "fixed_box": null
+  }
+]

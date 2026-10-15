@@ -1,0 +1,1 @@
+{"name":"hyena","action":"walk","directions":["up","right","down"],"source":"hyena_walk_reworked_oct12.png","reference":"melee","axis":{"right":"width"},"mirror":true}

@@ -1,0 +1,15 @@
+{
+  "uruk_champion.png": "61f05e621c8bfd31df0f508d919d1bdfaada5dd99e3712fe45590cd43b58f110",
+  "uruk_champion_death.png": "ced40fd5de36c5d95d66cce1fcfcb90fff0cbccb862b4e34ac20a49e8da58806",
+  "uruk_champion_deathfire.png": "a99717b0c61b83d3aa080e0dbd06878089657d8616123db8f8d0b8f3f5b5970d",
+  "uruk_champion_large.png": "45990163f8a83288c4e88490b639ef855c79891d4da7a9064ecff5a134e35b12",
+  "uruk_champion_melee_down.png": "8035ebe7a5b1b8104ebd3c301855f519898b5820a1dbcf137ad6c3b851c24a2e",
+  "uruk_champion_melee_left.png": "8f4e6dbcd29566ef893939aed4cd27ad401c6b2521086e6a6be10873119b67bd",
+  "uruk_champion_melee_right.png": "2a2412df307189a5270e8a084974ce13d432cd40302ef817852088cd458f0c7a",
+  "uruk_champion_melee_up.png": "279eec60bcad015a111b2a4e8464e400efde4030d4aeb980e21b9c950d64bfe2",
+  "uruk_champion_wake.png": "f7019fa2d69c3776a6162fc0cd9abbd76779e317608baa0f5330e9c3cf638aad",
+  "uruk_champion_walk_down.png": "fd1ef03b90db4ab0af50bf80fab1906c7f76250681a2e3d30d7f70daf125643f",
+  "uruk_champion_walk_left.png": "260e53fecbbf89afc816b101a45ae99b34e2806667a986ad9cfc9e83336e433d",
+  "uruk_champion_walk_right.png": "c8da848ca8dbe2675c967e0f6fa647a5f494ef27362a9600a9ade8c2a3b70c76",
+  "uruk_champion_walk_up.png": "bade4de5968014838d590c48b6358e80fa479cd4c54f76aec2092837d0dba852"
+}

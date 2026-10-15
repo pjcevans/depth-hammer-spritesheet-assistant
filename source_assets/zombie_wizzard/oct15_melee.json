@@ -1,0 +1,1 @@
+{"name":"zombie_wizzard","source":"oct15_melee.png","rows":3,"original_folder":"oct15_originals","jobs":[{"action":"melee","direction":"up","row":0,"metric":"red"},{"action":"melee","direction":"right","row":1,"mirror":true,"metric":"red"},{"action":"melee","direction":"down","row":2,"metric":"red"}]}

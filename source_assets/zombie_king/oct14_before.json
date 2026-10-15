@@ -1,0 +1,15 @@
+{
+  "zombie_king.png": "1993b67bfa5e33a85f5565366eafac327dd3b2e8bfb42525e6f79c0cd027143f",
+  "zombie_king_death.png": "6be50aefd05a15309d20d333c1a8d01daa45d6f512ffd566f172068c40ed100f",
+  "zombie_king_deathfire.png": "12436e355ca22c174f904c6d81016838b00f3692ac6d3dde1d119a2561cc42fd",
+  "zombie_king_large.png": "d01847b15f5338e30ff31d5d2955dc742b1915ada1a11f29f64144f37da01fe0",
+  "zombie_king_melee_down.png": "260a06b5a8dd50e615c3adc080cf719db1068dc54cfd7b59c5fc6a958108d363",
+  "zombie_king_melee_left.png": "b8323898f62f15c2d01ae2d630351f87de67d6477d0134f27ce4f8e3d390e624",
+  "zombie_king_melee_right.png": "e382908a6f5e8b03d4f37c8245c3097eaa76ddb9885031955449a77602d3c574",
+  "zombie_king_melee_up.png": "7e900f061ecf9055caf5357d86696ed3893cb44bac0e6f37d60c20b6fe6b11bf",
+  "zombie_king_wake.png": "95f705dbce1cea8be03f2faee272e6bb403ed57ce19241bb8873c0bc0c5a2efd",
+  "zombie_king_walk_down.png": "d058df8ef843ca47ef3be86969122f472ff305879e5ad833a693ebc2c8d4025a",
+  "zombie_king_walk_left.png": "13cfc73f4cce0200f20d6e661f7ef77fc9318f6eaa6eed91847792bd9e21c591",
+  "zombie_king_walk_right.png": "672b80aec7be1cb54d3c550d918da0e2c48b5bbb200d011222b4d0d0b0e81422",
+  "zombie_king_walk_up.png": "5ee2f9b0d6a2dbea44cc3d072bbb2de73565948cff9cd672fdaab8e7048b3bbb"
+}

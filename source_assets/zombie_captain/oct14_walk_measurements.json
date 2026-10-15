@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_captain_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09907120743034056,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_captain_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.1032258064516129,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_captain_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      31,
+      32,
+      32
+    ],
+    "scale": 0.0943952802359882,
+    "fixed_box": null
+  }
+]

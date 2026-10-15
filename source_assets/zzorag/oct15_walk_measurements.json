@@ -1,0 +1,14 @@
+[
+  {
+    "file": "zzorag_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.058394160583941604,
+    "fixed_box": null
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_punk_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.07960199004975124,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_punk_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0835509138381201,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_punk_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08060453400503778,
+    "fixed_box": null
+  }
+]

@@ -1,0 +1,2 @@
+Built-in ImageGen final prompt:
+Change ONLY legs in third and fourth sprites of this RIGHT-facing twoheaded ogre walk strip. Third sprite FOREGROUND leg must reach FORWARD towardRIGHT, with foot ahead of belly; FAR leg extends BEHIND towardLEFT. Fourth sprite FOREGROUND leg planted straight belowhip and FAR foot lifted back passing. Firsttwo unchanged. Preserve all heads torsos arms club colors outfit and physical size. Differentiate foot contact/passing and opposite stride. It is a fourframe alternating WALK not sameleg repeated. Transparent 1row4columns.

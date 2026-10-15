@@ -1,0 +1,35 @@
+[
+  {
+    "file": "white_dragon_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.10702341137123746
+  },
+  {
+    "file": "white_dragon_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09667673716012085
+  },
+  {
+    "file": "white_dragon_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      31,
+      32
+    ],
+    "scale": 0.10921501706484642
+  }
+]

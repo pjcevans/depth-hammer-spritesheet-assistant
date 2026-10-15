@@ -1,0 +1,15 @@
+{
+  "zombie_santa.png": "b257d4d4addcd4836797a392b07068ff16872c21c823d381661696fa2f61b61f",
+  "zombie_santa_death.png": "c97130909381030df4206f8ed96ba659479b3ae32ec41e366bc0c570f3cb7e4d",
+  "zombie_santa_deathfire.png": "1fbded5b5d926995c1cce081116a629b2f7c6d70b86398961c4a22e0d4578c76",
+  "zombie_santa_large.png": "b9a1e168efa2d026b1608ae264fe7a3850d663598a173e419b238da47d2832c6",
+  "zombie_santa_melee_down.png": "31d9f01b386f9db1e0febb50e472a1d18decca6d5c70b46704a4f03792ee1ba0",
+  "zombie_santa_melee_left.png": "6c494b0a8d63cea6fd8cbad7ca0e0752ced140e13436b1ab3d38089548e9eca0",
+  "zombie_santa_melee_right.png": "71a4d0519d45d0844ce6a0615e77c177f7861b85fd2fe14bf2fe38eefcce4ba9",
+  "zombie_santa_melee_up.png": "11c62db5e2961da7708abf783b8c0b38d774daa0180f043763f51fff46ec0cc2",
+  "zombie_santa_wake.png": "8a25b2d56ec15a444fa4f7cb30f5f733cac3ff398c3bf71d2665e028a3427293",
+  "zombie_santa_walk_down.png": "dd80154b04d558125642b682e8dcc1bac6c7ed78298de8e3ce05930e717526d9",
+  "zombie_santa_walk_left.png": "149c46640b21fe85421f6980b172fdfbbe36b4f257466088e7282498fbdf3f9f",
+  "zombie_santa_walk_right.png": "1c9a1e766d5d90de7fb2ab0166cf4b55311cbe7c36ab0f82590464ee5b9d88cd",
+  "zombie_santa_walk_up.png": "548aa3c9be8d5f3bb03abaf6cf6e1476d420fc901ba311d1bc3f750c780795e7"
+}

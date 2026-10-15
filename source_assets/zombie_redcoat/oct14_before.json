@@ -1,0 +1,15 @@
+{
+  "zombie_redcoat.png": "65603719b6b7445b616b79e6dffb5fbd380bc13fd8d02752d7352a73b8e4feff",
+  "zombie_redcoat_death.png": "1c58c3581aead69641816ddd78e0dac17cbca7340aff47530bc83a0d84867320",
+  "zombie_redcoat_deathfire.png": "2fb09f21c77f78b4a0cbd1a11037e9d3db1290bc7b7c72865ea768ff5aa74ac9",
+  "zombie_redcoat_large.png": "fdbc202d89478a05382a5550537c4ade144b5c55186e85f50dc1b49fc411de18",
+  "zombie_redcoat_melee_down.png": "a91a0fc4e8de661341659fbff0f0dd966d209eff1e6009e4f9acd107af1e504a",
+  "zombie_redcoat_melee_left.png": "9ae9f42a5f41ad955c5ef54c4490b27421d8c5f44dd1deca723f8f2d67e07a55",
+  "zombie_redcoat_melee_right.png": "1a2e68968836e1e4d811edcbfe526b261d063f4b21fcea3d850acafd91f2eddf",
+  "zombie_redcoat_melee_up.png": "64adf6334bae0c400239698edc98c306811e8e026420768a17570ad928f05d13",
+  "zombie_redcoat_wake.png": "d6a9469f3fc1e00f72a0fcb2f2cee6b22871631eff448c05d102ea2b60f57dde",
+  "zombie_redcoat_walk_down.png": "528013d499211db150a205085eab158eb0e32aa4d3f0c8a8eaf8b9feb8558dfc",
+  "zombie_redcoat_walk_left.png": "7370bf013d8c513d8ac58e892cec2f0e85b9b6f484dc3e3bf59fc358e06faff9",
+  "zombie_redcoat_walk_right.png": "7f1f4ff2a5fcf1f0f3f053f0ed3cc73a42d1591220d6a868700d06276eae1a88",
+  "zombie_redcoat_walk_up.png": "1ce1c31b705727088206a171f575c6ea336e90085949d3a56a55cee953277b30"
+}

@@ -1,0 +1,13 @@
+[
+  {
+    "file": "uruk_warrior_walk_left.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.06015037593984962
+  }
+]

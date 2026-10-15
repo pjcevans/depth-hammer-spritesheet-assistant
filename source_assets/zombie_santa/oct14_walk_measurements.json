@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_santa_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0935672514619883,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_santa_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09248554913294797,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_santa_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0943952802359882,
+    "fixed_box": null
+  }
+]

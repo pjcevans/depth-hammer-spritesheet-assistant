@@ -1,0 +1,1 @@
+{"name":"porcupine","action":"melee","directions":["up","right","down"],"source":"porcupine_melee_crouch_oct12.png","reference":"walk","axis":{"up":"width","right":"width","down":"width"},"mirror":true}

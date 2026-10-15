@@ -1,0 +1,15 @@
+{
+  "zombie_bowler.png": "ded01a839e0dc917d653443d87526857dd345a8ea832f77eaf7ec7b766aa7657",
+  "zombie_bowler_death.png": "ebe82012050e6d9b9bf4f477b3c213c9702b049154e3bc480614df2417c03174",
+  "zombie_bowler_deathfire.png": "5e0722874ceaff481e0f7181ef33717131da9372794ee71ca848ae3e984c4b28",
+  "zombie_bowler_large.png": "7a8a02095e95fa218142afc1643b8cdd048c5be99b9bdb0b492bf48d63ccb290",
+  "zombie_bowler_melee_down.png": "6e9b193793be5236efdc4a90c2d648b4f2167cae2eef5e6a712c5b184ef7da77",
+  "zombie_bowler_melee_left.png": "cc7a237818e6b567dca101e65cf3530d189b4aaea3c7fe3f21c93eec30efa975",
+  "zombie_bowler_melee_right.png": "6546eb04a39b14da104255679b61f03ddc591a9bbc2e4481c9a95a615c59c2bc",
+  "zombie_bowler_melee_up.png": "813062c31563f8491fa5f6e344c9cfce2b8c535601584b8ecaf89775245d02d6",
+  "zombie_bowler_wake.png": "bff1c5b5fe1acf86f23dcf61c003f99168a2e3902ddb3813283240160de53158",
+  "zombie_bowler_walk_down.png": "7713d65de241cce4309b05c6f73f45f604b8684042ad35fce072c431448c7c5c",
+  "zombie_bowler_walk_left.png": "2af44b6219cf95097dbe2a8d9dfda7c08ef23cb59aca623b01e9b2aeb389e5a5",
+  "zombie_bowler_walk_right.png": "4c852507fa513ead2104abee15d76e3b91e14eba1029fd5f8fee7cd2dcda8e82",
+  "zombie_bowler_walk_up.png": "bbde8d1930fa1a49f03ec7b5551cce239329148c90536452c060f50a238af5eb"
+}

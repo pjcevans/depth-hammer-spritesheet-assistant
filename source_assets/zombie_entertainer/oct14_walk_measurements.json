@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_entertainer_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0903954802259887,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_entertainer_walk_left.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.093841642228739,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_entertainer_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      32,
+      31,
+      31
+    ],
+    "scale": 0.08579088471849866,
+    "fixed_box": null
+  }
+]

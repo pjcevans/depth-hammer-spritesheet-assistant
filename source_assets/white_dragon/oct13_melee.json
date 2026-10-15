@@ -1,0 +1,1 @@
+{"name":"white_dragon","source":"oct13_melee.png","rows":3,"jobs":[{"action":"melee","direction":"up","row":0,"axis":"width"},{"action":"melee","direction":"right","row":1,"mirror":true,"axis":"width"},{"action":"melee","direction":"down","row":2}]}

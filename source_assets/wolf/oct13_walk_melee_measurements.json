@@ -1,0 +1,50 @@
+[
+  {
+    "file": "wolf_melee_up.png",
+    "target": 32.0,
+    "actual": [
+      30,
+      32,
+      32,
+      30
+    ],
+    "scale": 0.10596026490066225,
+    "fixed_box": null
+  },
+  {
+    "file": "wolf_melee_left.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      30
+    ],
+    "scale": 0.11149825783972125,
+    "fixed_box": null
+  },
+  {
+    "file": "wolf_melee_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.1245136186770428,
+    "fixed_box": null
+  },
+  {
+    "file": "wolf_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      31,
+      31,
+      32
+    ],
+    "scale": 0.11594202898550725,
+    "fixed_box": null
+  }
+]

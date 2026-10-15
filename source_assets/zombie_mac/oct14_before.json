@@ -1,0 +1,15 @@
+{
+  "zombie_mac.png": "a53d29279c7474841f1ad29407553e10453fbd00a0b1c73ba3837b9a64d68247",
+  "zombie_mac_death.png": "859ecd5c597ac1d6c01265524377aee3cd7d881f9f5c04f0f647dd456604a61c",
+  "zombie_mac_deathfire.png": "1ac7edc205fecb09d54180c6a39a754aa5a88edb1b4c899f40bd8ad164cd40c3",
+  "zombie_mac_large.png": "f8c862593f5aa5fb453549742d66ad403df4fd7c86659509c8be14946b168348",
+  "zombie_mac_melee_down.png": "3dbdf5595ca2743f345173ef21c76bcbeb5b740f23c8917e165c81c13a3d8154",
+  "zombie_mac_melee_left.png": "ad6e5b0cd0b275af7d2233dd845d8d295786fc3f4814904eb648c762501863ce",
+  "zombie_mac_melee_right.png": "039e78fd92cbcbf54cedbb43b4be3e70bc11948affa3ab7ae273d59d8a9ba6ef",
+  "zombie_mac_melee_up.png": "d93e69c81eb7f5bf72465777030d723f78daf788bc66428d43be87a7ef0b7370",
+  "zombie_mac_wake.png": "e5d46a262ef633eba7aa87168ba037f8a0fb14a3d0056b213cacf0f08f3461cd",
+  "zombie_mac_walk_down.png": "a4df6ca5a27020db98e22fa6c4a34e7a52caca8bc20418f8ee258248e72d9c6a",
+  "zombie_mac_walk_left.png": "8ebb789ae608c73a7d9b13e13c499740bc35adf7da3663eb89ac6c8fc0f2ae1a",
+  "zombie_mac_walk_right.png": "b80edd0a5954ad75001b287777e7f4a1d7b1a22adf09cb702e87b8c39375ad9b",
+  "zombie_mac_walk_up.png": "c82e67acab769577bdae8e4c20b051b784ddb2fc674a07e2d3c460b9fb3f1927"
+}

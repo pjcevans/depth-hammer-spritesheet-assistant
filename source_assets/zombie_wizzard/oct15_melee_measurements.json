@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_wizzard_melee_up.png",
+    "target": 28.0,
+    "actual": [
+      28,
+      28,
+      28,
+      28
+    ],
+    "scale": 0.0910569105691057,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_wizzard_melee_right.png",
+    "target": 28.5,
+    "actual": [
+      29,
+      27,
+      26,
+      28
+    ],
+    "scale": 0.09815950920245399,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_wizzard_melee_down.png",
+    "target": 27.5,
+    "actual": [
+      29,
+      27,
+      26,
+      28
+    ],
+    "scale": 0.09717314487632508,
+    "fixed_box": null
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "wolf_melee_up.png",
+    "target": 32.0,
+    "actual": [
+      30,
+      31,
+      32,
+      30
+    ],
+    "scale": 0.093841642228739,
+    "fixed_box": null
+  },
+  {
+    "file": "wolf_melee_left.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      32,
+      32,
+      29
+    ],
+    "scale": 0.09329446064139942,
+    "fixed_box": null
+  },
+  {
+    "file": "wolf_melee_down.png",
+    "target": 32.0,
+    "actual": [
+      30,
+      32,
+      32,
+      30
+    ],
+    "scale": 0.12260536398467432,
+    "fixed_box": null
+  }
+]

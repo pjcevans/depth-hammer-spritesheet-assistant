@@ -1,0 +1,15 @@
+{
+  "zombie_wizzard.png": "046709b991f6f562db5a93063836f7a09d981f2cfaccb8bc1ccc00226590e857",
+  "zombie_wizzard_death.png": "76df00eb514b4d23e55372e753ac00877b0e3c117b858c919738d517ae3f2f67",
+  "zombie_wizzard_deathfire.png": "80a8c2fb09e7ec074ba599938c33b72d976634d4c6e188c41d23a23474871e7e",
+  "zombie_wizzard_large.png": "ca51df76b1a7be2903f189c9c19db39d78b65676458250ab84c42120b3c295c8",
+  "zombie_wizzard_melee_down.png": "77e81331983ef1b03f6866825e1531aad1276e16426aa1442feaca837759ab2e",
+  "zombie_wizzard_melee_left.png": "5007827d9f94023e116e726402a45114d0025c831925aaaf0462036bb746f15e",
+  "zombie_wizzard_melee_right.png": "733100c8f214c1c24021404008e6bf37a16ff22f23d5e1bfb5ad9321d8417923",
+  "zombie_wizzard_melee_up.png": "2a7a7dd2d03267940e73ccd9feee067a23159edfa4d0139d90e6848da2ae6d6e",
+  "zombie_wizzard_wake.png": "c9ae4d4943d7eabacea80800791b966882e2da40a8ba9c42b899966ab56281e4",
+  "zombie_wizzard_walk_down.png": "c41dcd27c41b0453c0b4f7494a624e72885876aee4256df3d88c3ad454a7d08a",
+  "zombie_wizzard_walk_left.png": "b8ce54428d1adba806b67e4c4bfb942fbb5e04d0dd7e786f7d044c414d7e0243",
+  "zombie_wizzard_walk_right.png": "23df1ac28781b90a85849245434da7ba7221c0f1d0e915c1cd5f93d669615d9c",
+  "zombie_wizzard_walk_up.png": "cc14239b6f588ecead6b644d63813213ceaadabc640ba3239c34a35e44a2e9bd"
+}

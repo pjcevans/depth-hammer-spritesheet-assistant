@@ -1,0 +1,15 @@
+{
+  "zombie_punk.png": "a7d44fad8fd3a0120f940c236c70607820bdd48dd79d87f4e320ab73d73af740",
+  "zombie_punk_death.png": "6b693a50c0c5299c085fc8e43d7bc2e8d1bcae686153fda0b07c68be54c45ccf",
+  "zombie_punk_deathfire.png": "dc5ea25e154f5d19848b3ebcdd68cc5d83b0d34dd2467eaae642d69e6929d5cf",
+  "zombie_punk_large.png": "d4b8e664de77f560d1d42b13204a9b49f5bf6bc643a21fac632ba6ab4485c6d7",
+  "zombie_punk_melee_down.png": "37ae62b10f8dbb60cd8a49f319ddba0087147856eb0f3d8db58e92187ef1b907",
+  "zombie_punk_melee_left.png": "816ba0f08e29e77e8c4701d10b1bb014deaf560394bcd3a08229fd1b8d0a12c4",
+  "zombie_punk_melee_right.png": "5922eca066752f54cb70b4122c5279b8c5ecb8a38c5d3e5ed0b8f8ae979ba92d",
+  "zombie_punk_melee_up.png": "0cfaa885b36b8e763c5a53cc8c3f72c0d712fc6f1ba0df67bb2732ee63cc67f0",
+  "zombie_punk_wake.png": "e400c278ac56300094df68d3fb2302820937b9d0bba6812697290a3167ca0370",
+  "zombie_punk_walk_down.png": "f83caf458f511bd4027adcef6ef35bd272c87a3775d81e2215a79900821c63d7",
+  "zombie_punk_walk_left.png": "9faf2ea751de5095a45817eb0388b14f90c31a9690d0b47116e84dc968eed489",
+  "zombie_punk_walk_right.png": "88d942e1d9867367bc485281bef7c7c6b63893484a2b14d68747bed18edbdb15",
+  "zombie_punk_walk_up.png": "b4903a6fc01483cd43810c80d019d599d27873104e23b96a7abdd0c7f96918ff"
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_goth_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08648648648648649,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_goth_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0906515580736544,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_goth_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0810126582278481,
+    "fixed_box": null
+  }
+]

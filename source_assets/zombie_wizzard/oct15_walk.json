@@ -1,0 +1,1 @@
+{"name":"zombie_wizzard","source":"oct15_walk.png","rows":3,"original_folder":"oct15_originals","jobs":[{"action":"walk","direction":"up","row":0,"metric":"red"},{"action":"walk","direction":"right","row":1,"mirror":true,"metric":"red"},{"action":"walk","direction":"down","row":2,"metric":"red"}]}

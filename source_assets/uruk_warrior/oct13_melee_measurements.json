@@ -1,0 +1,35 @@
+[
+  {
+    "file": "uruk_warrior_melee_up.png",
+    "target": 26.0,
+    "actual": [
+      29,
+      28,
+      24,
+      24
+    ],
+    "scale": 0.11764705882352941
+  },
+  {
+    "file": "uruk_warrior_melee_right.png",
+    "target": 24.5,
+    "actual": [
+      30,
+      24,
+      24,
+      24
+    ],
+    "scale": 0.12403100775193798
+  },
+  {
+    "file": "uruk_warrior_melee_down.png",
+    "target": 25.5,
+    "actual": [
+      28,
+      25,
+      23,
+      26
+    ],
+    "scale": 0.11486486486486487
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "zombie_goth.png": "7afbcf4277e8be201b7af1c2fbf522b15b9161a04857b3d5e1d8fad809831fc2",
+  "zombie_goth_death.png": "1c8677955993fff095d9a8a564e1478e55db5e4af9d04f5ceedf3ed0546ba4af",
+  "zombie_goth_deathfire.png": "c9d9a3733073c0646b590aabeb12bcb38c3dc60582a965b7f0621bc663849b24",
+  "zombie_goth_large.png": "9a7d2d00a93680979ba577d445c273808e863ba61695a964c3bb8e397a8597bd",
+  "zombie_goth_melee_down.png": "8bd5372e22fe61dbe09ba3e36095bbc33f6a9802494cc52ba637da4be11d6ae0",
+  "zombie_goth_melee_left.png": "cafc52c95a5efedb398a30638f94c9ba021a3a42ad9501a0d2205a33fe123d60",
+  "zombie_goth_melee_right.png": "eac795eef788e2f5d96a53e9e4acf99e2833acf81b871418b1e40db97070aee7",
+  "zombie_goth_melee_up.png": "22a74769b4f049b97cd8130c99c47a5c8f4d40160c98fa00e48ef227df9e0ee9",
+  "zombie_goth_wake.png": "9e1c8b515798cbae9bb31b4b83cd238a9f65d56c79fe7ceace3e02457b0b6e46",
+  "zombie_goth_walk_down.png": "de9b2a6106923e6afae323dd898bcce6a5660ddfeb78b16c273dd3fabcfd4e8c",
+  "zombie_goth_walk_left.png": "56ac410a30c84ca083ac937ab10db628a5a4d2dbde934401c9c6b25fcd9308ef",
+  "zombie_goth_walk_right.png": "2f9e6bc0fd5628949e703b027b31a3bc907dda3d7605b81eeacbd6f89a723e34",
+  "zombie_goth_walk_up.png": "0774522d3e74a2cadde12eb5e1990b58f1ecbe7ad0c81a9dc37508c734d7c923"
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "yeek_walk_up.png",
+    "target": 31.0,
+    "actual": [
+      31,
+      31,
+      31,
+      31
+    ],
+    "scale": 0.09567901234567901,
+    "fixed_box": null
+  },
+  {
+    "file": "yeek_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.09968847352024922,
+    "fixed_box": null
+  },
+  {
+    "file": "yeek_walk_down.png",
+    "target": 31.0,
+    "actual": [
+      31,
+      31,
+      31,
+      31
+    ],
+    "scale": 0.08869814020028613,
+    "fixed_box": null
+  }
+]

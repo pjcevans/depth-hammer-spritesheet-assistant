@@ -1,0 +1,26 @@
+{
+  "name": "uruk_warrior",
+  "source": "oct13_melee.png",
+  "rows": 4,
+  "jobs": [
+    {
+      "action": "melee",
+      "direction": "up",
+      "row": 0,
+      "metric": "blue"
+    },
+    {
+      "action": "melee",
+      "direction": "right",
+      "row": 1,
+      "mirror": true,
+      "metric": "blue"
+    },
+    {
+      "action": "melee",
+      "direction": "down",
+      "row": 3,
+      "metric": "blue"
+    }
+  ]
+}

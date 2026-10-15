@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zzorag_melee_up.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      31,
+      32,
+      31
+    ],
+    "scale": 0.060836501901140684,
+    "fixed_box": null
+  },
+  {
+    "file": "zzorag_melee_right.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      32,
+      30,
+      32
+    ],
+    "scale": 0.10810810810810811,
+    "fixed_box": null
+  },
+  {
+    "file": "zzorag_melee_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      31
+    ],
+    "scale": 0.11307420494699646,
+    "fixed_box": null
+  }
+]

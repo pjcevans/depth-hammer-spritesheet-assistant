@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_in_green_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08060453400503778,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_in_green_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08672086720867209,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_in_green_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      31,
+      32,
+      32
+    ],
+    "scale": 0.07655502392344497,
+    "fixed_box": null
+  }
+]

@@ -1,0 +1,1 @@
+{"name":"zombie_the_giant","source":"oct15_walk.png","rows":3,"original_folder":"oct15_originals","jobs":[{"action":"walk","direction":"up","row":0},{"action":"walk","direction":"left","row":1,"mirror":true},{"action":"walk","direction":"down","row":2}]}

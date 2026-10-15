@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_redcoat_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08290155440414508,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_redcoat_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08888888888888889,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_redcoat_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      31
+    ],
+    "scale": 0.07901234567901234,
+    "fixed_box": null
+  }
+]

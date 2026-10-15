@@ -1,0 +1,38 @@
+[
+  {
+    "file": "yeek_melee_up.png",
+    "target": 31.0,
+    "actual": [
+      31,
+      31,
+      31,
+      31
+    ],
+    "scale": 0.09582689335394126,
+    "fixed_box": null
+  },
+  {
+    "file": "yeek_melee_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0960960960960961,
+    "fixed_box": null
+  },
+  {
+    "file": "yeek_melee_down.png",
+    "target": 31.0,
+    "actual": [
+      31,
+      31,
+      31,
+      31
+    ],
+    "scale": 0.09612403100775194,
+    "fixed_box": null
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "zombie_eno.png": "ce36971d88909bcaa95a7b31df128f5a2b6c91b6cf3fe768e38c9a096e1adc27",
+  "zombie_eno_death.png": "c70301ffca285ebcf2d8e5852084ececd067f291ed44d5d15b188fb6cbc74fa9",
+  "zombie_eno_deathfire.png": "7d8e5cca11eacd164fc5ebb0f0343c37117d8ccac026e2466405118e4b819b8a",
+  "zombie_eno_large.png": "712ce910e6464c9deffb96ca8a3355d17ec38414de0928409b4797ed75e1845d",
+  "zombie_eno_melee_down.png": "89bec5776ab35e9931e7b6bf8e3a4e9bace9179598678b5d562f1c30520ba496",
+  "zombie_eno_melee_left.png": "e60e778a881b56d323c6ffbe74197a75af1fada94d99e67508befb4f628420f6",
+  "zombie_eno_melee_right.png": "1dff052f38bb7eb2fcae1121401e510848ca09d441728366a66437486f782f71",
+  "zombie_eno_melee_up.png": "70726867f4b300f778b2ac734ce8597a977e98954299f54b8348400e0c9f9423",
+  "zombie_eno_wake.png": "d3fc960ed5b7b9676d6dbb92e42fdde7b32c6cf2f70746ff037fe4a51aa6ac52",
+  "zombie_eno_walk_down.png": "a751ffb060e1d330fdb29f54968c828e578131474841aefc374d5dd2ecd87f9b",
+  "zombie_eno_walk_left.png": "c0559ed39c5fd35ec78cbb4fd06b776b78759fc0420e7bc8c027608dae122376",
+  "zombie_eno_walk_right.png": "9b3f1303218b40d846d8c6639b8ac01b9883cde259c848e88d78ece733fb14f3",
+  "zombie_eno_walk_up.png": "98e209777e62772cb90814b1454769a3af976de824a325aa805d4d82f854ab63"
+}

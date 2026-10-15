@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_beekeeper_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      31,
+      31,
+      32
+    ],
+    "scale": 0.09411764705882353,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_beekeeper_walk_left.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.0935672514619883,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_beekeeper_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      31,
+      32,
+      32
+    ],
+    "scale": 0.09495548961424333,
+    "fixed_box": null
+  }
+]

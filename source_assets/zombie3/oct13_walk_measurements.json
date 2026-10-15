@@ -1,0 +1,14 @@
+[
+  {
+    "file": "zombie3_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.061420345489443376,
+    "fixed_box": null
+  }
+]

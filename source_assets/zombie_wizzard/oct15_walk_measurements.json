@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_wizzard_walk_up.png",
+    "target": 28.0,
+    "actual": [
+      28,
+      28,
+      28,
+      28
+    ],
+    "scale": 0.08682170542635659,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_wizzard_walk_right.png",
+    "target": 28.5,
+    "actual": [
+      29,
+      28,
+      29,
+      28
+    ],
+    "scale": 0.09163987138263666,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_wizzard_walk_down.png",
+    "target": 27.5,
+    "actual": [
+      28,
+      27,
+      28,
+      27
+    ],
+    "scale": 0.0878594249201278,
+    "fixed_box": null
+  }
+]

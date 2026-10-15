@@ -1,0 +1,15 @@
+{
+  "zombie_wrestler.png": "a3bfd31f0c508efd335a193e5268750d5bdabb06ac15e218e3b71e7622ffe3d3",
+  "zombie_wrestler_death.png": "804e964802ed125dbd513cad95012f7e5d5ebf94b58622420c1fd1fe7838b445",
+  "zombie_wrestler_deathfire.png": "5a6fa6b38af9958d12699cb90151e3ffde2c083628f84d209acff30911b8e4c3",
+  "zombie_wrestler_large.png": "febf2c3e4b870f4fa82851d05a02de2d4494661b6c83456a07e250fc2f28c3d0",
+  "zombie_wrestler_melee_down.png": "a593b5b9f9404a35f8cf274cfbf17d82636d2b0bd7c209bdd8a7cedc15c881ba",
+  "zombie_wrestler_melee_left.png": "b4366895544bb8206f2d5ccc7702421ecdf3172e69d8bf20056b4a0a2f4e2104",
+  "zombie_wrestler_melee_right.png": "fe9d66986a1dc042753e0754a1fa0d7cfeeadb7456f6da22e56b9965b538e7d0",
+  "zombie_wrestler_melee_up.png": "3982e3805e7266e1b9e8a8f92ef83d77643f1daeda6cecfd820a3906faddd833",
+  "zombie_wrestler_wake.png": "6c07f112fc3baac22270e9bcb80d393702668b14ae34ea69cabdbae75b290f2f",
+  "zombie_wrestler_walk_down.png": "47dc7faccf9d76c45d9893d4ccbe625017914a9327591cb8a140e8806f5e401b",
+  "zombie_wrestler_walk_left.png": "944a24b3ea692c3a1a445a2347ad816f13a52e6cc4d9c97e3d3b9dfa44284e28",
+  "zombie_wrestler_walk_right.png": "695449e08551b2a0463c624e0174e74c821a1a392be30b86ee69da59f4bdb639",
+  "zombie_wrestler_walk_up.png": "f1a881ba262b051710807b7a45fa69ee56c013afdccab423c70643d9fa4dd428"
+}

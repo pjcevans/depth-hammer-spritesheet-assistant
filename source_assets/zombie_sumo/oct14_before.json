@@ -1,0 +1,15 @@
+{
+  "zombie_sumo.png": "14165f0bc9dc11a6ad2cb701b48fc28e24d8d6f88bd3af0f664c6511050f922a",
+  "zombie_sumo_death.png": "143edf56537a5af58399bc4b70d2937758a1d2681048f6cbbe5f447723c57803",
+  "zombie_sumo_deathfire.png": "c93f743d9b9ef2d13b15d5274548614b75cb6bfe82e5ddb0983e2a3eca285ead",
+  "zombie_sumo_large.png": "5441b0fcb60dbbb5840268bd04c3f9e90d0fb8495472b09ebcd2afc3bf510b70",
+  "zombie_sumo_melee_down.png": "9c220df865820450ec6b301bbd9fa5a6fb51d3c13e02db65dd8f72bbe5ef840d",
+  "zombie_sumo_melee_left.png": "befdb3ba3a08d25c8bc20fea195f54496fc52e6129598e60f7dd24ad3ba4d0dd",
+  "zombie_sumo_melee_right.png": "865636f4350144a661104819b31a1ca8f37298992efd47f00ab001f40cc84d4e",
+  "zombie_sumo_melee_up.png": "7c13f5c1f145fcbae59472933cd58f3d305e50a00c7ea07f11f57968400433d4",
+  "zombie_sumo_wake.png": "7171a8367d47ca98c29daa57dbeb7d2f78401b213041ca53910c07c1b0c459cf",
+  "zombie_sumo_walk_down.png": "b038b72c1c35c5c0448d687ec8db6f3a31e523447151b77d2a704801514b223e",
+  "zombie_sumo_walk_left.png": "eba6d71021c62dae63e0aa34097d21eeb55835e7e917e78ecffa31837c0cc0ae",
+  "zombie_sumo_walk_right.png": "5978b32541eb37d7a4fc30c2ab78946540a735a3df4fe670a5ed603c33fd02f3",
+  "zombie_sumo_walk_up.png": "df75a4576eff729226b1b813da972b7264d6d9f28b50a27eff71620f113aeec6"
+}

@@ -1,0 +1,1 @@
+{"name":"zombie_bowler","source":"oct14_melee.png","rows":3,"jobs":[{"action":"melee","direction":"up","row":0,"source":"oct14_melee_up.png"},{"action":"melee","direction":"right","row":1,"mirror":true},{"action":"melee","direction":"down","row":2}]}

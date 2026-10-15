@@ -1,0 +1,16 @@
+{
+    "name":  "moss_champion",
+    "action":  "melee",
+    "directions":  [
+                       "up",
+                       "right",
+                       "down"
+                   ],
+    "source":  "moss_champion_melee_reworked_oct12.png",
+    "reference":  "walk",
+    "green":  true,
+    "mirror":  true,
+    "source_overrides":  {
+                             "right":  "moss_champion_melee_right_reworked_oct12.png"
+                         }
+}

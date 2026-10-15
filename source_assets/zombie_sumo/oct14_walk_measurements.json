@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_sumo_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      31,
+      31,
+      32,
+      31
+    ],
+    "scale": 0.10094637223974763,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_sumo_walk_right.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      31,
+      32
+    ],
+    "scale": 0.0975609756097561,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_sumo_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      31
+    ],
+    "scale": 0.09302325581395349,
+    "fixed_box": null
+  }
+]

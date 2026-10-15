@@ -1,0 +1,38 @@
+[
+  {
+    "file": "zombie_mac_walk_up.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      31
+    ],
+    "scale": 0.08226221079691516,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_mac_walk_left.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08533333333333333,
+    "fixed_box": null
+  },
+  {
+    "file": "zombie_mac_walk_down.png",
+    "target": 32.0,
+    "actual": [
+      32,
+      32,
+      32,
+      32
+    ],
+    "scale": 0.08311688311688312,
+    "fixed_box": null
+  }
+]
